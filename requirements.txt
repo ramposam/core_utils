@@ -1,0 +1,2 @@
+--trusted-host 4.158.111.250 --extra-index-url https://4.158.111.250/artifactory/api/pypi/pypi-local/simple
+custom-operators==1.0.0
