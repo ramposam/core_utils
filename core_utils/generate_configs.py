@@ -1,6 +1,7 @@
 import os
 
-from core_utils.file_utils import read_and_infer, write_to_json_file, write_to_file, get_unique_keys
+from core_utils.file_utils import read_and_infer, write_to_json_file, write_to_file, get_unique_keys, \
+    get_file_name_pattern
 from core_utils.generate_snowflake_pipeline import SnowflakePipeline
 from core_utils.meta_classes import DatasetConfigs, DatasetVersion, DatasetMirror, DatasetStage
 from pathlib import Path
@@ -142,14 +143,16 @@ class ConfigTemplate():
             if len(dataset_configs_mirror_v1_path) > 255:
                 dataset_configs_mirror_v1_path = r'\\?\{}'.format(dataset_configs_mirror_v1_path)
 
+            file_name_pattern , datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path))
+            datetime_pattern = self.datetime_format if self.datetime_format else datetime_pattern.replace("%Y","YYYY").replace("%m","MM").replace("%d","DD")
             ds_mirror_v1_configs = DatasetMirror(table_name=f"T_ML_{dataset_name}".upper(),
                                                  table_schema=mirror_schema,
                                                  unique_keys=unique_keys,
                                                  file_format_params=file_format,
                                                  file_schema=file_schema,
-                                                 file_name_pattern="datetime_pattern.csv",
-                                                 file_path=f"datasets/{dataset_name}",
-                                                 datetime_pattern=self.datetime_format)
+                                                 file_name_pattern=file_name_pattern,
+                                                 file_path=self.s3_dataset_path,
+                                                 datetime_pattern=datetime_pattern)
 
             write_to_json_file(data=ds_mirror_v1_configs.__dict__, file_path=dataset_configs_mirror_v1_path)
 

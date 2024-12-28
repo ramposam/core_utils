@@ -1,4 +1,6 @@
 import csv
+import re
+
 import pandas as pd
 import logging
 import json
@@ -103,32 +105,40 @@ def write_to_file(data, file_path):
         print(f"An error occurred: {e}")
 
 
-import re
-from datetime import datetime
+def get_file_name_pattern(file_name):
+  """
+  Extracts the filename pattern from a given file name.
 
+  Args:
+    file_name: The name of the file.
 
-def identify_date_format(file_name):
-    # Define common date patterns and their formats
-    date_patterns = [
-        (r'\b(\d{4})-(\d{2})-(\d{2})\b', '%Y-%m-%d'),  # YYYY-MM-DD
-        (r'\b(\d{2})-(\d{2})-(\d{4})\b', '%m-%m-%Y'),  # MM-DD-YYYY
-        (r'\b(\d{2})-(\d{2})-(\d{4})\b', '%d-%m-%Y'),  # DD-MM-YYYY
-        (r'\b(\d{2})/(\d{2})/(\d{4})\b', '%d/%m/%Y'),  # DD/MM/YYYY
-        (r'\b(\d{2})/(\d{2})/(\d{4})\b', '%m/%d/%Y'),  # MM/DD/YYYY
-        (r'\b(\d{4})/(\d{2})/(\d{2})\b', '%Y/%m/%d'),  # YYYY/MM/DD
-        (r'\b(\d{4})(\d{2})(\d{2})\b', '%Y%m%d'),  # YYYYMMDD
-        (r'\b(\d{2})(\d{2})(\d{4})\b', '%d%m%Y'),  # DDMMYYYY
-        (r'\b(\d{2})(\d{2})(\d{4})\b', '%m%d%Y'),  # MMDDYYYY
-    ]
+  Returns:
+    A string representing the filename pattern.
+    Includes placeholders for datetime components if found.
+  """
 
-    for pattern, date_format in date_patterns:
-        match = re.search(pattern, file_name)
-        if match:
-            try:
-                # Validate if the extracted string is a valid date
-                datetime.strptime(match.group(0), date_format)
-                return match.group(0), date_format
-            except ValueError:
-                continue
+  pattern = file_name
+  date_format = ""
+  # Check for datetime patterns
+  datetime_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}-\d{4})|(\d{4}\d{2}\d{2})|(\d{2}\d{2}\d{4})", file_name)
+  if datetime_match:
+    if re.match(r"\d{4}-\d{2}-\d{2}", datetime_match.group(0)):
+      date_format = "%Y-%m-%d"
+    elif re.match(r"\d{2}-\d{2}-\d{4}", datetime_match.group(0)):
+      date_format = "%d-%m-%Y"
+    elif re.match(r"\d{4}\d{2}\d{2}", datetime_match.group(0)):
+      date_format = "%Y%m%d"
+    elif re.match(r"\d{2}\d{2}\d{4}", datetime_match.group(0)):
+      date_format = "%d%m%Y"
 
-    return None, None
+    if date_format:
+      pattern = re.sub(r"\d{4}-\d{2}-\d{2}", "{datetime_pattern}", pattern)
+      pattern = re.sub(r"\d{2}-\d{2}-\d{4}", "{datetime_pattern}", pattern)
+      pattern = re.sub(r"\d{4}\d{2}\d{2}", "{datetime_pattern}", pattern)
+      pattern = re.sub(r"\d{2}\d{2}\d{4}", "{datetime_pattern}", pattern)
+
+  # Replace other potential variable parts with placeholders
+  # (e.g., user IDs, counters)
+  # pattern = re.sub(r"[a-zA-Z0-9]{3,}", "{var}", pattern)
+
+  return pattern,date_format
