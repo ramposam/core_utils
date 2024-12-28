@@ -30,13 +30,18 @@ class DBTMirrorModel():
         database="{database}"
     ) }}}}
 
-    WITH {dataset_name} AS (
-        SELECT *
-        FROM {{{{ source('{dataset_name}', '{table_name}_TR') }}}}
-    )
+{{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS', 'FILE_ROW_NUMBER', 'FILE_LAST_MODIFIED'] -%}}
 
-    SELECT *
-    FROM {dataset_name}
+WITH {dataset_name} AS (
+    SELECT  *,
+    md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
+    md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as row_hash_id
+
+    FROM {{{{ source('{dataset_name}', '{table_name}_TR') }}}}
+    where file_date = '{{{{ var("run_date")  }}}}'
+)
+SELECT *
+FROM {dataset_name}
     """
             # Write the SQL content to the output file
             with open(model_path, 'w', encoding='utf-8') as sql_file:
@@ -46,7 +51,7 @@ class DBTMirrorModel():
         except Exception as e:
             print(f"Error: {e}")
 
-    def convert_json_to_yaml_preserve_order(self,json_data, yaml_file_path):
+    def convert_json_to_yaml_preserve_order(self, json_data, yaml_file_path):
         """
         Converts a JSON file to a YAML file while preserving the order of elements.
 
@@ -67,19 +72,19 @@ class DBTMirrorModel():
         except Exception as e:
             print(f"Error: {e}")
 
-    def get_tests_yml(self,dataset_name,mirror_table,unique_keys):
+    def get_tests_yml(self, dataset_name, mirror_table, unique_keys):
 
         mirror_template = {"name": dataset_name,
                            "version": 2,
                            "models": [{"name": mirror_table,
-                                      "config": {"tags": [f"{dataset_name}-mirror",
-                                                          dataset_name]}}]}
+                                       "config": {"tags": [f"{dataset_name}-mirror",
+                                                           dataset_name]}}]}
 
         unique_table_level_column_tests = " || '-' || ".join(unique_keys)
         mirror_template["models"][0].update({"tests": [{"unique": {"column_name": unique_table_level_column_tests,
-                                                                "name": f"""{dataset_name}_{mirror_table}_unique""".upper(),
-                                                                "config": {"severity": "WARN",
-                                                                           "where": """file_date = '{{ var("run_date") }}'"""}}}]})
+                                                                   "name": f"""{dataset_name}_{mirror_table}_unique""".upper(),
+                                                                   "config": {"severity": "WARN",
+                                                                              "where": """file_date = '{{ var("run_date") }}'"""}}}]})
 
         columns_test = []
         for column in unique_keys:
@@ -91,25 +96,29 @@ class DBTMirrorModel():
         mirror_template["models"][0].update({"columns": columns_test})
         return mirror_template
 
-    def get_sources_yml(self,dataset_name,table_name):
+    def get_sources_yml(self, dataset_name, table_name):
         source_template = {"name": dataset_name,
                            "version": 2,
                            "sources": [{"name": dataset_name,
-                                       "database": "MIRROR_DB",
-                                      "schema": "MIRROR",
-                                       "tables":[{"name": table_name,
-                                                  "config": {"tags": [
-                                                      f"{dataset_name}-src",
-                                                      dataset_name]}
-                                                  }]}]}
+                                        "database": "MIRROR_DB",
+                                        "schema": "MIRROR",
+                                        "tables": [{"name": table_name,
+                                                    "config": {"tags": [
+                                                        f"{dataset_name}-src",
+                                                        dataset_name]}
+                                                    }]}]}
 
         return source_template
 
     def generate(self):
 
-        models_path = "models"
+        current_dir = os.getcwd()
+        models_path = os.path.join(current_dir, "dbt", "models")
+
+        Path(models_path).mkdir(exist_ok=True, parents=True)
+
         dataset_name = list(self.configs.keys())[0]
-        mirror_dir = os.path.join(os.getcwd(), models_path, "mirror", dataset_name)
+        mirror_dir = os.path.join(models_path, "mirror", dataset_name)
 
         Path(mirror_dir).mkdir(exist_ok=True, parents=True)
 
@@ -119,20 +128,20 @@ class DBTMirrorModel():
         unique_keys = mirror_configs["unique_keys"]
 
         mirror_sources_yml_path = os.path.join(mirror_dir, f"mirror_source_{dataset_name}.yml")
-        mirror_source_data = self.get_sources_yml(dataset_name=dataset_name,table_name=f"{mirror_table}_TR")
+        mirror_source_data = self.get_sources_yml(dataset_name=dataset_name, table_name=f"{mirror_table}_TR")
         self.convert_json_to_yaml_preserve_order(mirror_source_data, mirror_sources_yml_path)
 
         mirror_table_tests_yml_path = os.path.join(mirror_dir, f"mirror_tests_{dataset_name}.yml")
-        mirror_tests_data = self.get_tests_yml(dataset_name,f"{mirror_table}",unique_keys)
+        mirror_tests_data = self.get_tests_yml(dataset_name, f"{mirror_table}", unique_keys)
         self.convert_json_to_yaml_preserve_order(mirror_tests_data, mirror_table_tests_yml_path)
 
         mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
         self.generate_dbt_model_sql(table_name=mirror_table,
-                               materialization="incremental",
-                               model_path=mirror_model_table_path,
-                               dataset_name=dataset_name,
-                               database=mirror_configs["database"],
-                               schema=mirror_configs["schema"],
-                               unique_key=unique_keys)
+                                    materialization="incremental",
+                                    model_path=mirror_model_table_path,
+                                    dataset_name=dataset_name,
+                                    database=mirror_configs["database"],
+                                    schema=mirror_configs["schema"],
+                                    unique_key=unique_keys)
 
 

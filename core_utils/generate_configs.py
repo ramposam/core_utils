@@ -23,8 +23,8 @@ class ConfigTemplate():
 
     def add_meta_cols(self, schema, layer):
         if layer == "MIRROR":
-            schema["filename"] = "STRING"
             schema["file_date"] = "TIMESTAMP"
+            schema["filename"] = "STRING"
             schema["file_row_number"] = "STRING"
             schema["file_last_modified"] = "TIMESTAMP"
             schema["created_dts"] = "TIMESTAMP"
