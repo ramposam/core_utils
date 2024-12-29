@@ -38,6 +38,7 @@ class ConfigTemplate():
             schema["active_fl"] = "STRING"
             schema["effective_start_date"] = "TIMESTAMP"
             schema["effective_end_date"] = "TIMESTAMP"
+            schema["unique_hash_id"] = "STRING"
             schema["row_hash_id"] = "STRING"
         return schema
 

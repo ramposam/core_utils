@@ -49,5 +49,5 @@ class DatasetStage:
     table_name: str
     table_schema: Dict
     unique_keys: List
-    transformations: List[Dict] = field(default_factory=lambda: [{"name": "select_expr",
-                                                                  "expr": ["*"]}])
+    transformations: List[Dict] = field(default_factory=lambda: [{"type": "select",
+                                                                  "columns": ["*"]}])

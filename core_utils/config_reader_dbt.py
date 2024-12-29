@@ -93,5 +93,6 @@ class ConfigReaderDBT():
                                             "schema":source_configs["stage_layer"]["schema"],
                                             "table_name":stage_configs[stage_version]["table_name"],
                                             "table_schema":stage_configs[stage_version]["table_schema"],
-                                           "unique_keys":stage_configs[stage_version]["unique_keys"]}}}
+                                            "unique_keys":stage_configs[stage_version]["unique_keys"],
+                                            "transformations":stage_configs[stage_version]["transformations"]}}}
         return dataset_configs

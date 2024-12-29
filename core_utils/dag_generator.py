@@ -136,7 +136,7 @@ with DAG(
         dag_template += dag_tasks
         return dag_template
 
-    def generate_mirror_stage_ddls(self, database, schema, table_name, table_schema):
+    def generate_ddls(self, database, schema, table_name, table_schema,layer):
 
         """
         Generate Snowflake table DDL from table name and schema.
@@ -152,6 +152,10 @@ with DAG(
 
         for column_name, data_type in table_schema.items():
             column_definitions.append(f"    {column_name} {data_type}")
+
+        if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
+            column_definitions.append(f"    UNIQUE_HASH_ID STRING")
+            column_definitions.append(f"    ROW_HASH_ID STRING")
 
         ddl += ",\n".join(column_definitions)
         ddl += "\n);"
@@ -178,11 +182,11 @@ with DAG(
         table_name, table_schema = dataset_configs["mirror"]["v1"]["table_name"], dataset_configs["mirror"]["v1"][
             "table_schema"]
 
-        mirror_tr_ddls = self.generate_mirror_stage_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema)
+        mirror_tr_ddls = self.generate_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema,"mirror")
 
         write_to_file(mirror_tr_ddls, os.path.join(dag_gen_dir, f"{table_name}_TR.sql"))
 
-        mirror_ddls = self.generate_mirror_stage_ddls(mirror_db, mirror_schema, table_name, table_schema)
+        mirror_ddls = self.generate_ddls(mirror_db, mirror_schema, table_name, table_schema,"mirror")
 
         write_to_file(mirror_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
@@ -190,7 +194,7 @@ with DAG(
         table_name, table_schema = dataset_configs["stage"]["v1"]["table_name"], dataset_configs["stage"]["v1"][
             "table_schema"]
 
-        stage_ddls = self.generate_mirror_stage_ddls(stage_db, stage_schema, table_name, table_schema)
+        stage_ddls = self.generate_ddls(stage_db, stage_schema, table_name, table_schema,"stage")
 
         write_to_file(stage_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 

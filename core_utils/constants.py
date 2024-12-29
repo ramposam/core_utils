@@ -43,4 +43,4 @@ mirror_file_meta_cols = ["filename","file_row_number","file_last_modified"]
 mirror_meta_cols = ["created_dts","created_by"]
 stage_file_meta_cols = ["filename","file_row_number","file_last_modified"]
 stage_meta_cols = ["created_dts","created_by","updated_dts","updated_by","active",
-                   "effective_start_date", "effective_end_date","row_hash_id" ]
+                   "effective_start_date", "effective_end_date","unique_hash_id","row_hash_id" ]
