@@ -28,6 +28,8 @@ class DagGenerator:
                 dag_template += "from operators.mirror_load_operator import MirrorLoadOperator" + "\n"
             elif task == "schema_check_task":
                 dag_template += "from operators.file_table_schema_check_operator import FileTableSchemaCheckOperator" + "\n"
+            elif task == "stage_task":
+                dag_template += "from operators.stage_load_operator import StageLoadOperator" + "\n"
 
         datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
 
@@ -62,7 +64,7 @@ with DAG(
             dag_template += f"""
          # Task 1: Using the AcquisitionOperator
         acq_task = AcquisitionOperator(
-            task_id="s3_file_check",
+            task_id="check_file_present_on_s3",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             dataset_dir="{dataset_configs["mirror"]["v1"]["file_path"]}",
@@ -73,7 +75,7 @@ with DAG(
         if "download_task" in dataset_configs["tasks"]:
             dag_template += f"""
         download_task = DownloadOperator(
-            task_id="download_file_from_s3",
+            task_id="download_file_from_s3_to_airflow_tmp_area",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             dataset_dir="{dataset_configs["mirror"]["v1"]["file_path"]}",
@@ -84,7 +86,7 @@ with DAG(
         if "move_task" in dataset_configs["tasks"]:
             dag_template += f"""
         move_task = MoveFileToSnowflakeOperator(
-            task_id="move_file_to_snowflake",
+            task_id="move_file_to_snowflake_internal_stage",
             snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}"
         )
@@ -92,7 +94,7 @@ with DAG(
         if "schema_check_task" in dataset_configs["tasks"]:
             dag_template += f"""
         schema_check_task = FileTableSchemaCheckOperator(
-            task_id="check_file_table_schema",
+            task_id="check_schema_of_config_n_received_file",
             snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
@@ -106,7 +108,7 @@ with DAG(
         if "copy_task" in dataset_configs["tasks"]:
             dag_template += f"""
         copy_task = SnowflakeCopyOperator(
-            task_id="copy_file_from_stage",
+            task_id="copy_data_from_internal_stage",
             snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
@@ -119,7 +121,18 @@ with DAG(
         if "mirror_task" in dataset_configs["tasks"]:
             dag_template += f"""
         mirror_task = MirrorLoadOperator(
-            task_id="load_to_mirror",
+            task_id="load_to_mirror_table",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+        if "stage_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        stage_task = StageLoadOperator(
+            task_id="load_to_stage_table",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
@@ -154,6 +167,8 @@ with DAG(
             column_definitions.append(f"    {column_name} {data_type}")
 
         if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
+            column_definitions.append(f"    UPDATED_DTS TIMESTAMP")
+            column_definitions.append(f"    UPDATED_BY STRING")
             column_definitions.append(f"    UNIQUE_HASH_ID STRING")
             column_definitions.append(f"    ROW_HASH_ID STRING")
 

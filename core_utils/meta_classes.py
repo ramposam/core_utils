@@ -13,7 +13,8 @@ class DatasetConfigs:
                                  "move_task",
                                  "schema_check_task",
                                  "copy_task",
-                                 "mirror_task"])
+                                 "mirror_task",
+                                 "stage_task"])
     mirror_layer: Dict = field(default_factory=lambda: {"database": "MIRROR_DB", "schema": "MIRROR"})
     stage_layer: Dict = field(default_factory=lambda: {"database": "STAGE_DB", "schema": "STAGE"})
     s3_connection_id: str = field(default="S3_CONN_ID")

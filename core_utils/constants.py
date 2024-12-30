@@ -40,7 +40,7 @@ WHERE STATUS = 'LOAD_FAILED';
 
 """
 mirror_file_meta_cols = ["filename","file_row_number","file_last_modified"]
-mirror_meta_cols = ["created_dts","created_by"]
+mirror_meta_cols = ["CREATED_DTS","CREATED_BY"]
 stage_file_meta_cols = ["filename","file_row_number","file_last_modified"]
-stage_meta_cols = ["created_dts","created_by","updated_dts","updated_by","active",
-                   "effective_start_date", "effective_end_date","unique_hash_id","row_hash_id" ]
+stage_meta_cols = ["CREATED_DTS","CREATED_BY","UPDATED_DTS","UPDATED_BY","ACTIVE",
+                   "EFFECTIVE_START_DATE", "EFFECTIVE_END_DATE","UNIQUE_HASH_ID","ROW_HASH_ID" ]

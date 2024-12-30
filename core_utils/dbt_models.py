@@ -4,12 +4,13 @@ from pathlib import Path
 
 from ruamel.yaml import YAML
 
+
 class DBTMirrorModel():
-    def __init__(self,configs):
+    def __init__(self, configs):
         self.configs = configs
 
-    def generate_mirror_model(self,table_name, model_path, materialization, dataset_name, unique_key, schema,
-                               database):
+    def generate_mirror_model(self, table_name, model_path, materialization, dataset_name, unique_key, schema,
+                              database):
         """
         Generates a dbt model SQL file with the given configuration and source data.
 
@@ -31,12 +32,18 @@ class DBTMirrorModel():
         database="{database}"
     ) }}}}
 
-{{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS', 'FILE_DATE', 'FILE_ROW_NUMBER', 'FILE_LAST_MODIFIED'] -%}}
+{{%- set row_hash_excluded_columns = ['CREATED_BY', 'CREATED_DTS','FILE_DATE', 'FILENAME', 'FILE_ROW_NUMBER', 'FILE_LAST_MODIFIED','UPDATED_DTS','UPDATED_BY','UNIQUE_HASH_ID','ROW_HASH_ID'] -%}}
+{{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS', 'UPDATED_DTS','UPDATED_BY','UNIQUE_HASH_ID','ROW_HASH_ID'] -%}}
 
 WITH {dataset_name} AS (
-    SELECT  *,
+    SELECT  
+    {{{{  get_table_columns(this,excluded_columns)  }}}},
     md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
-    md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as row_hash_id
+    md5({{{{  generate_row_hash_id(this,row_hash_excluded_columns)  }}}}) as row_hash_id,
+    current_timestamp() as CREATED_DTS,
+    current_user() as CREATED_BY,
+    current_timestamp() as UPDATED_DTS,
+    current_user() as UPDATED_BY
 
     FROM {{{{ source('mirror_{dataset_name}', '{table_name}_TR') }}}}
     where file_date = '{{{{ var("run_date")  }}}}'
@@ -73,7 +80,7 @@ FROM {dataset_name}
         except Exception as e:
             print(f"Error: {e}")
 
-    def get_tests_yml(self, dataset_name, table_name, unique_keys,layer):
+    def get_tests_yml(self, dataset_name, table_name, unique_keys, layer):
 
         mirror_template = {"name": dataset_name,
                            "version": 2,
@@ -97,10 +104,10 @@ FROM {dataset_name}
         mirror_template["models"][0].update({"columns": columns_test})
         return mirror_template
 
-    def get_sources_yml(self, dataset_name, table_name,database,schema,layer):
+    def get_sources_yml(self, dataset_name, table_name, database, schema, layer):
         source_template = {"name": dataset_name,
                            "version": 2,
-                           "sources": [{"name": layer+"_"+dataset_name,
+                           "sources": [{"name": layer + "_" + dataset_name,
                                         "database": database,
                                         "schema": schema,
                                         "tables": [{"name": table_name,
@@ -111,34 +118,35 @@ FROM {dataset_name}
 
         return source_template
 
-    def generate_mirror_source(self,mirror_table,mirror_dir,dataset_name,database,schema):
+    def generate_mirror_source(self, mirror_table, mirror_dir, dataset_name, database, schema):
 
         mirror_sources_yml_path = os.path.join(mirror_dir, f"mirror_source_{dataset_name}.yml")
         mirror_source_data = self.get_sources_yml(dataset_name=dataset_name, table_name=f"{mirror_table}_TR",
-                                                  database=database,schema=schema,layer="mirror")
+                                                  database=database, schema=schema, layer="mirror")
         self.convert_json_to_yaml_preserve_order(mirror_source_data, mirror_sources_yml_path)
 
-    def generate_mirror_tests(self,mirror_table,unique_keys,mirror_dir,dataset_name):
+    def generate_mirror_tests(self, mirror_table, unique_keys, mirror_dir, dataset_name):
 
         mirror_table_tests_yml_path = os.path.join(mirror_dir, f"mirror_tests_{dataset_name}.yml")
-        mirror_tests_data = self.get_tests_yml(dataset_name, f"{mirror_table}", unique_keys,"mirror")
+        mirror_tests_data = self.get_tests_yml(dataset_name, f"{mirror_table}", unique_keys, "mirror")
         self.convert_json_to_yaml_preserve_order(mirror_tests_data, mirror_table_tests_yml_path)
 
-    def generate_stage_source(self,mirror_table,stage_dir,dataset_name,database,schema):
+    def generate_stage_source(self, mirror_table, stage_dir, dataset_name, database, schema):
 
         stage_sources_yml_path = os.path.join(stage_dir, f"stage_source_{dataset_name}.yml")
         stage_source_data = self.get_sources_yml(dataset_name=dataset_name, table_name=f"{mirror_table}",
-                                                 database=database,schema=schema,layer="stage")
+                                                 database=database, schema=schema, layer="stage")
         self.convert_json_to_yaml_preserve_order(stage_source_data, stage_sources_yml_path)
 
-    def generate_stage_tests(self,stage_table,unique_keys,stage_dir,dataset_name):
+    def generate_stage_tests(self, stage_table, unique_keys, stage_dir, dataset_name):
 
         stage_table_tests_yml_path = os.path.join(stage_dir, f"stage_tests_{dataset_name}.yml")
-        stage_tests_data = self.get_tests_yml(dataset_name, f"{stage_table}", unique_keys,"stage")
+        stage_tests_data = self.get_tests_yml(dataset_name, f"{stage_table}", unique_keys, "stage")
         self.convert_json_to_yaml_preserve_order(stage_tests_data, stage_table_tests_yml_path)
 
-    def getnerate_stage_model(self,table_name,mirror_table, model_path, materialization, dataset_name, unique_key, schema,
-                               database,transformations):
+    def getnerate_stage_model(self, table_name, mirror_table, model_path, materialization, dataset_name, unique_key,
+                              schema,
+                              database, transformations):
 
         # Generate the dbt model SQL content
         sql_content = f"""
@@ -158,7 +166,7 @@ FROM {dataset_name}
         # Base CTE
         cte_queries.append(f""" cte_{cte_index} 
         AS ( 
-        SELECT * exclude (CREATED_BY, CREATED_DTS,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID) 
+        SELECT * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID) 
         FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
         where file_date = '{{{{ var("run_date")  }}}}'
         )""")
@@ -207,9 +215,13 @@ FROM {dataset_name}
             '{{{{ var("run_date") }}}}' as effective_start_date ,
             '9999-12-31' as effective_end_date,
             md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
-            md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as row_hash_id
+            md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as row_hash_id,
+            current_timestamp() as CREATED_DTS,
+            current_user() as CREATED_BY,
+            current_timestamp() as UPDATED_DTS,
+            current_user() as UPDATED_BY
        FROM cte_{cte_index}     
-       
+
     """
 
         sql_content = sql_content + "\n" + with_query
@@ -219,7 +231,6 @@ FROM {dataset_name}
             sql_file.write(sql_content.strip())
 
         print(f"Successfully generated dbt model SQL at {model_path}")
-
 
     def generate(self):
 
@@ -243,21 +254,23 @@ FROM {dataset_name}
 
         unique_keys = mirror_configs["unique_keys"]
 
-        self.generate_mirror_source(mirror_table, mirror_dir, dataset_name,mirror_configs["database"],mirror_configs["schema"])
+        self.generate_mirror_source(mirror_table, mirror_dir, dataset_name, mirror_configs["database"],
+                                    mirror_configs["schema"])
 
-        self.generate_mirror_tests(mirror_table,unique_keys,mirror_dir,dataset_name)
+        self.generate_mirror_tests(mirror_table, unique_keys, mirror_dir, dataset_name)
 
         mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
 
         self.generate_mirror_model(table_name=mirror_table,
-                                    materialization="incremental",
-                                    model_path=mirror_model_table_path,
-                                    dataset_name=dataset_name,
-                                    database=mirror_configs["database"],
-                                    schema=mirror_configs["schema"],
-                                    unique_key=unique_keys)
+                                   materialization="incremental",
+                                   model_path=mirror_model_table_path,
+                                   dataset_name=dataset_name,
+                                   database=mirror_configs["database"],
+                                   schema=mirror_configs["schema"],
+                                   unique_key=unique_keys)
 
-        self.generate_stage_source(mirror_table, stage_dir, dataset_name,mirror_configs["database"],mirror_configs["schema"])
+        self.generate_stage_source(mirror_table, stage_dir, dataset_name, mirror_configs["database"],
+                                   mirror_configs["schema"])
 
         self.generate_stage_tests(stage_table, unique_keys, stage_dir, dataset_name)
 
