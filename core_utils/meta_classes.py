@@ -13,6 +13,7 @@ class DatasetConfigs:
                                  "move_task",
                                  "schema_check_task",
                                  "copy_task",
+                                 "file_mirror_check_task",
                                  "mirror_task",
                                  "stage_task"])
     mirror_layer: Dict = field(default_factory=lambda: {"database": "MIRROR_DB", "schema": "MIRROR"})

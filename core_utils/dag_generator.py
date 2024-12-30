@@ -30,6 +30,8 @@ class DagGenerator:
                 dag_template += "from operators.file_table_schema_check_operator import FileTableSchemaCheckOperator" + "\n"
             elif task == "stage_task":
                 dag_template += "from operators.stage_load_operator import StageLoadOperator" + "\n"
+            elif task == "file_mirror_check_task":
+                dag_template += "from operators.file_table_data_check_operator import FileTableDataCheckOperator" + "\n"
 
         datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
 
@@ -118,6 +120,20 @@ with DAG(
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
         )
             """
+
+        if "file_mirror_check_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        file_mirror_check_task = FileTableDataCheckOperator(
+            task_id="check_file_n_mirror_table_data",
+            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}",
+            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
+        )
+            """
+
         if "mirror_task" in dataset_configs["tasks"]:
             dag_template += f"""
         mirror_task = MirrorLoadOperator(
@@ -129,6 +145,7 @@ with DAG(
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
+
         if "stage_task" in dataset_configs["tasks"]:
             dag_template += f"""
         stage_task = StageLoadOperator(
