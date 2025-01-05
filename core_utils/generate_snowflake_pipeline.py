@@ -112,13 +112,33 @@ class SnowflakePipeline():
 
         return file_meta_sql
 
+    def get_mirror_validation_task(self, stream_name,dataset_name,stage_name,database,schema, task_name, table_name):
+        validation_sql = f"""CREATE OR REPLACE TASK {task_name}
+            WAREHOUSE = COMPUTE_WH
+            AFTER MIRROR_DB.MIRROR.TASK_LOG_SNOWPIPE_ERRORS            
+            WHEN SYSTEM$STREAM_HAS_DATA('{stream_name}') -- Skips execution if the stream has no data
+            AS
+            CALL META_DB.META.VALIDATE_FILE_AND_TABLE(
+                '{dataset_name}',
+                '{stage_name.split(".")[-1]}',
+                '{database}',
+                '{schema}',
+                '{table_name.split(".")[-1]}',
+                '',
+                1
+            );
+        """
+        return validation_sql
+
     def get_all_sqls(self):
 
         dataset_name_upper = self.dataset_name.upper()
         mirror_tr_table_name = f"MIRROR_DB.MIRROR.T_ML_{dataset_name_upper}_TR"
         file_format_name = f"MIRROR_DB.MIRROR.FF_{dataset_name_upper}"
         mirror_stream_name = f"MIRROR_DB.MIRROR.STREAM_{dataset_name_upper}"
+        mirror_tr_stream_name = f"MIRROR_DB.MIRROR.STREAM_{dataset_name_upper}_TR"
         mirror_task_name = f"MIRROR_DB.MIRROR.TASK_{dataset_name_upper}"
+        mirror_tr_validation_task_name = f"MIRROR_DB.MIRROR.TASK_{dataset_name_upper}_TR_VALIDATION"
         mirror_table_name = f"MIRROR_DB.MIRROR.T_ML_{dataset_name_upper}"
         stg_table_name = f"STAGE_DB.STAGE.T_STG_{dataset_name_upper}"
         stg_stream_name = f"STAGE_DB.STAGE.STREAM_{dataset_name_upper}"
@@ -154,9 +174,13 @@ class SnowflakePipeline():
 
         snowpipe_sql = self.get_snowpipe_sql(copy_statement)
 
-        mirror_stream_sql = self.get_stream_sql(stream_name=mirror_stream_name, table_name=mirror_tr_table_name)
+        mirror_stream_sql = self.get_stream_sql(stream_name=mirror_tr_stream_name, table_name=mirror_tr_table_name)
 
-        mirror_task_sql = self.get_task_sql(stream_name=mirror_stream_name, task_name=mirror_task_name,
+        mirror_validation_sql = self.get_mirror_validation_task(stream_name=mirror_tr_stream_name,dataset_name=dataset_name_upper,
+                                                                stage_name=stage_name,database="MIRROR_DB",schema="MIRROR",task_name=mirror_tr_validation_task_name,
+                                                                table_name=mirror_tr_table_name)
+
+        mirror_task_sql = self.get_task_sql(stream_name=mirror_tr_stream_name, task_name=mirror_task_name,
                                             table_name=mirror_table_name)
 
         stage_stream_sql = self.get_stream_sql(stream_name=stg_stream_name, table_name=mirror_table_name)
@@ -170,6 +194,6 @@ class SnowflakePipeline():
 
         all_sqls = "\n".join([file_meta_sql, mirror_tr_table_sql, mirror_table_sql, stage_table_sql,
                               stage_sql, file_format_sql, snowpipe_sql, mirror_stream_sql,
-                              mirror_task_sql, stage_stream_sql, stage_task_sql])
+                              mirror_validation_sql,mirror_task_sql, stage_stream_sql, stage_task_sql])
 
         return all_sqls
