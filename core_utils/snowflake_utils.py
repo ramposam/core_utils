@@ -65,7 +65,7 @@ class SnowflakeUtils:
         :return: DDL string for creating the table
         """
         ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
-        ddl += f"CREATE OR REPLACE TABLE {table_name} (\n"
+        ddl += f" CREATE TABLE IF NOT EXISTS {table_name} (\n"
         column_definitions = []
 
         for column_name, data_type in table_schema.items():

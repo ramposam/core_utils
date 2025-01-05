@@ -1,12 +1,12 @@
 snowflake_stage_template = """
-CREATE OR REPLACE STAGE MIRROR_DB.MIRROR.STG_{dataset_name}_S3
+ CREATE STAGE IF NOT EXISTS MIRROR_DB.MIRROR.STG_{dataset_name}_S3
   URL='s3://{s3_bucket}/{s3_dataset_path}/'
   CREDENTIALS=(AWS_KEY_ID='{aws_access_key}' AWS_SECRET_KEY='{aws_secret_key}')
   ENCRYPTION=(TYPE='AWS_SSE_KMS' KMS_KEY_ID = 'aws/key');
   """
 
 snowflake_pipe_template = """
-CREATE OR REPLACE PIPE MIRROR_DB.MIRROR.PIPE_{dataset_name}
+ CREATE PIPE IF NOT EXISTS  MIRROR_DB.MIRROR.PIPE_{dataset_name}
     AUTO_INGEST = TRUE     
 AS {copy_statement} ;
 
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS MIRROR_DB.MIRROR.T_SNOWPIPE_ERRORS (
 );
 
 -- Logging errors into a snowpipe error table, so that every pipeline status would be knowing.
-CREATE OR REPLACE TASK MIRROR_DB.MIRROR.TASK_LOG_SNOWPIPE_ERRORS
+ CREATE TASK IF NOT EXISTS  MIRROR_DB.MIRROR.TASK_LOG_SNOWPIPE_ERRORS
 SCHEDULE = '1 MINUTE'
 AS
 INSERT INTO MIRROR_DB.MIRROR.T_SNOWPIPE_ERRORS (PIPE_NAME, FILE_NAME, ERROR_MESSAGE)

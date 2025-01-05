@@ -95,7 +95,7 @@ class ConfigTemplate():
 
             pipeline = SnowflakePipeline(bucket=self.bucket, s3_dataset_path=self.s3_dataset_path,
                                          dataset_name=self.dataset_name, file_extension=file_extension,
-                                         delimiter=delimiter, mirror_schema=mirror_schema,
+                                         delimiter=delimiter, mirror_schema=mirror_schema,file_schema=file_schema,
                                          aws_access_key=self.aws_access_key, aws_secret_key=self.aws_secret_key,
                                          stage_schema=stage_schema, schedule_interval=self.schedule_interval,
                                          snowflake_stage_name=self.snowflake_stage_name)

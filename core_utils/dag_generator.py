@@ -177,7 +177,7 @@ with DAG(
         :return: DDL string for creating the table
         """
         ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
-        ddl += f"CREATE OR REPLACE TABLE {database}.{schema}.{table_name} (\n"
+        ddl += f" CREATE TABLE IF NOT EXISTS {database}.{schema}.{table_name} (\n"
         column_definitions = []
 
         for column_name, data_type in table_schema.items():
@@ -230,7 +230,7 @@ with DAG(
 
         write_to_file(stage_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
-        stage_sql = f"""CREATE OR REPLACE  STAGE {mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]} ;"""
+        stage_sql = f""" CREATE STAGE IF NOT EXISTS  {mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]} ;"""
 
         write_to_file(stage_sql, os.path.join(dag_gen_dir, dataset_configs["snowflake_stage_name"] + ".sql"))
 
