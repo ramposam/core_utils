@@ -98,13 +98,11 @@ class ConfigTemplate():
             mirror_validation_procedure_sqls = sql_file_read.read() + "\n"
             sql_file_read.close()
 
-            debug_sql = f"""
-
-                # Copy Procedure Python code to a file add following lines at the end of the file and debug incase procedure has errors or not working as expected 
+            debug_sql = """\n /* # Copy Procedure Python code to a file add following lines at the end of the file and debug incase procedure has errors or not working as expected 
 
                 # Connect to Snowflake
                 connection_parameters = {
-            "user":os.getenv("SNOWFLAKE_USER"),
+                    "user":os.getenv("SNOWFLAKE_USER"),
                     "password":os.getenv("SNOWFLAKE_PASSWORD"),
                     "account":os.getenv("SNOWFLAKE_ACCOUNT"),
                     "database":os.getenv("SNOWFLAKE_DATABASE"),
@@ -123,7 +121,7 @@ class ConfigTemplate():
                                         run_date="2024-12-21"
                     )
 
-                print(result)
+                print(result) */
                 """
             file_extension = os.path.basename(self.file_path).split(".")[-1]
             pipeline = SnowflakePipeline(bucket=self.bucket, s3_dataset_path=self.s3_dataset_path,
