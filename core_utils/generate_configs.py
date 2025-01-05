@@ -91,16 +91,51 @@ class ConfigTemplate():
 
         # Generates pipelines either for Snowflake using snowpipe, stream, tasks , no airflow dags, operators
         if self.pipeline_type == "SNOWPIPE":
-            file_extension = os.path.basename(self.file_path).split(".")[-1]
 
+            validation_procedure_path = os.path.join(os.getcwd(), "helpers",
+                                                     "mirror_validation_procedure_function_template.sql")
+            sql_file_read = open(validation_procedure_path, 'r')
+            mirror_validation_procedure_sqls = sql_file_read.read() + "\n"
+            sql_file_read.close()
+
+            debug_sql = f"""
+
+                # Copy Procedure Python code to a file add following lines at the end of the file and debug incase procedure has errors or not working as expected 
+
+                # Connect to Snowflake
+                connection_parameters = {
+            "user":os.getenv("SNOWFLAKE_USER"),
+                    "password":os.getenv("SNOWFLAKE_PASSWORD"),
+                    "account":os.getenv("SNOWFLAKE_ACCOUNT"),
+                    "database":os.getenv("SNOWFLAKE_DATABASE"),
+                    "schema":os.getenv("SNOWFLAKE_SCHEMA"),
+                    "warehouse":os.getenv("SNOWFLAKE_WAREHOUSE"),
+                    "role":os.getenv("SNOWFLAKE_ROLE")}
+
+
+                # Create a Snowpark session
+                session = Session.builder.configs(connection_parameters).create()
+
+                result = compare_csv_with_table(session=session,dataset_name='NETFLIX_MOVIES_AND_TV_SHOWS',
+                                       database="MIRROR_DB",schema="MIRROR",
+                                       stage_name = "STG_NETFLIX_MOVIES_AND_TV_SHOWS",
+                                       table_name = 'T_ML_NETFLIX_MOVIES_AND_TV_SHOWS_TR',
+                                        run_date="2024-12-21"
+                    )
+
+                print(result)
+                """
+            file_extension = os.path.basename(self.file_path).split(".")[-1]
             pipeline = SnowflakePipeline(bucket=self.bucket, s3_dataset_path=self.s3_dataset_path,
                                          dataset_name=self.dataset_name, file_extension=file_extension,
-                                         delimiter=delimiter, mirror_schema=mirror_schema,file_schema=file_schema,
+                                         delimiter=delimiter, mirror_schema=mirror_schema, file_schema=file_schema,
                                          aws_access_key=self.aws_access_key, aws_secret_key=self.aws_secret_key,
                                          stage_schema=stage_schema, schedule_interval=self.schedule_interval,
                                          snowflake_stage_name=self.snowflake_stage_name)
 
             pipeline_sqls = pipeline.get_all_sqls()
+
+            pipeline_sqls += mirror_validation_procedure_sqls + "\n" + debug_sql
 
             pipeline_sqls_path = os.path.join(configs_dataset_dir, f"pipeline_{dataset_name}.sql")
 
@@ -144,8 +179,10 @@ class ConfigTemplate():
             if len(dataset_configs_mirror_v1_path) > 255:
                 dataset_configs_mirror_v1_path = r'\\?\{}'.format(dataset_configs_mirror_v1_path)
 
-            file_name_pattern , datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path))
-            datetime_pattern = self.datetime_format if self.datetime_format else datetime_pattern.replace("%Y","YYYY").replace("%m","MM").replace("%d","DD")
+            file_name_pattern, datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path))
+            datetime_pattern = self.datetime_format if self.datetime_format else datetime_pattern.replace("%Y",
+                                                                                                          "YYYY").replace(
+                "%m", "MM").replace("%d", "DD")
             ds_mirror_v1_configs = DatasetMirror(table_name=f"T_ML_{dataset_name}".upper(),
                                                  table_schema=mirror_schema,
                                                  unique_keys=unique_keys,
