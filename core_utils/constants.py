@@ -32,15 +32,15 @@ SCHEDULE = '1 MINUTE'
 AS
 INSERT INTO MIRROR_DB.MIRROR.T_SNOWPIPE_ERRORS (PIPE_NAME, FILE_NAME, ERROR_MESSAGE)
 SELECT 
-    'PIPE_{dataset_name}' AS pipe_name,
+    'MIRROR_DB.MIRROR.PIPE_{dataset_name}' AS pipe_name,
     FILE_NAME,
     ERROR_MESSAGE
-FROM TABLE(INFORMATION_SCHEMA.LOAD_HISTORY_BY_PIPE('PIPE_{dataset_name}'))
+FROM TABLE(INFORMATION_SCHEMA.LOAD_HISTORY_BY_PIPE('MIRROR_DB.MIRROR.PIPE_{dataset_name}'))
 WHERE STATUS = 'LOAD_FAILED';
 
 """
 mirror_file_meta_cols = ["filename","file_row_number","file_last_modified"]
-mirror_meta_cols = ["CREATED_DTS","CREATED_BY"]
+mirror_tr_meta_cols = ["CREATED_DTS","CREATED_BY"]
+mirror_addl_meta_cols = ["UPDATED_DTS","UPDATED_BY","UNIQUE_HASH_ID","ROW_HASH_ID"]
 stage_file_meta_cols = ["filename","file_row_number","file_last_modified"]
-stage_meta_cols = ["CREATED_DTS","CREATED_BY","UPDATED_DTS","UPDATED_BY","ACTIVE",
-                   "EFFECTIVE_START_DATE", "EFFECTIVE_END_DATE","UNIQUE_HASH_ID","ROW_HASH_ID" ]
+stage_addl_meta_cols = ["ACTIVE_FL", "EFFECTIVE_START_DATE", "EFFECTIVE_END_DATE" ]

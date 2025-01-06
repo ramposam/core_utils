@@ -1,6 +1,7 @@
 import json
 
-from core_utils.constants import snowflake_stage_template, snowflake_pipe_template
+from core_utils.constants import snowflake_stage_template, snowflake_pipe_template, mirror_addl_meta_cols, \
+    stage_addl_meta_cols
 from core_utils.snowflake_utils import SnowflakeUtils
 
 
@@ -41,7 +42,8 @@ class SnowflakePipeline():
          """
         return stream_sql
 
-    def get_task_sql(self, stream_name, task_name, table_name):
+    def get_task_sql(self, stream_name, task_name, table_name,table_schema,layer):
+        insert_statement = self.get_layer_insert_statement(stream_name,table_name,table_schema,layer)
         task_sql = f"""CREATE OR REPLACE TASK {task_name}
             SCHEDULE = 'USING CRON {self.schedule_interval} UTC'
             WAREHOUSE = '{self.warehouse}'
@@ -50,12 +52,55 @@ class SnowflakePipeline():
              SYSTEM$STREAM_HAS_DATA('{stream_name}') -- skips when stream has no data
             AS
             -- you could write merge statement incase you wanted upsert target, src as stream
-            INSERT INTO {table_name}
-            SELECT *  exclude (METADATA$ACTION,METADATA$ISUPDATE,METADATA$ROW_ID)
-            FROM {stream_name}; \n ALTER TASK {task_name} RESUME;
+            {insert_statement} \n ALTER TASK {task_name} RESUME;
         """
 
         return task_sql
+
+    def get_layer_insert_statement(self,stream_name,table_name,table_schema,layer):
+
+        columns = []
+        for column_name, data_type in table_schema.items():
+            columns.append(column_name.upper())
+
+        if layer.upper() == "MIRROR":
+
+            insert_columns = columns + mirror_addl_meta_cols
+            select_columns = columns + ["NULL as UPDATED_DTS", "NULL AS UPDATED_BY" , "NULL AS UNIQUE_HASH_ID", "NULL AS ROW_HASH_ID"]
+            # statement += f"INSERT INTO {table_name} (" + " , ".join(insert_columns) + ") \n"
+            # statement += f"""SELECT {" , ".join(select_columns)} FROM {stream_name} ; \n"""
+            update_stmt = ",".join([f"TARGET.{col} = SOURCE.{col}" for col in insert_columns])
+
+        elif layer.upper() == "STAGE":
+
+            mirror_cols = columns + mirror_addl_meta_cols
+            remove_file_meta_columns = [column for column in mirror_cols if column not in ["FILE_DATE" , "FILENAME" , "FILE_ROW_NUMBER" , "FILE_LAST_MODIFIED"]]
+            select_columns = remove_file_meta_columns  + ["'Y' as ACTIVE_FL","FILE_DATE AS EFFECTIVE_START_DATE", "'9999-12-31' AS EFFECTIVE_END_DATE"]
+            insert_columns = remove_file_meta_columns + stage_addl_meta_cols
+            # statement += f"INSERT INTO {table_name} (" + " , ".join(insert_columns) + ") \n"
+            # statement += f"""SELECT {" , ".join(select_columns)} ,'Y' as ACTIVE_FL,FILE_DATE AS EFFECTIVE_START_DATE, '9999-12-31' AS EFFECTIVE_END_DATE FROM {stream_name} ; \n"""
+            update_stmt = ",".join([f"TARGET.{col} = SOURCE.{col}" for col in insert_columns])
+
+        merge_stmt = f"""MERGE INTO {table_name} AS TARGET
+                        USING (
+                            SELECT 
+                                {" , ".join(select_columns)}
+                            FROM {stream_name}
+                        ) AS SOURCE
+                        ON TARGET.UNIQUE_HASH_ID = SOURCE.UNIQUE_HASH_ID
+                        WHEN MATCHED THEN
+                            UPDATE SET 
+                                {update_stmt}
+                        WHEN NOT MATCHED THEN
+                            INSERT (
+                                {" , ".join(insert_columns)}
+                            )
+                            VALUES (
+                                {" , ".join([f"SOURCE.{col}" for col in insert_columns])}
+                                );
+                        """
+
+        return merge_stmt
 
     def get_file_meta_sql(self, database, schema, table_name,dataset_name, version, start_date, end_date):
         print(self.file_schema)
@@ -159,9 +204,9 @@ class SnowflakePipeline():
                                                    delimiter=self.delimiter)
 
         mirror_tr_table_sql = util.get_mirror_stage_ddls("MIRROR_DB", "MIRROR", mirror_tr_table_name,
-                                                         self.mirror_schema)
-        mirror_table_sql = util.get_mirror_stage_ddls("MIRROR_DB", "MIRROR", mirror_table_name, self.mirror_schema)
-        stage_table_sql = util.get_mirror_stage_ddls("STAGE_DB", "STAGE", stg_table_name, self.stage_schema)
+                                                         self.mirror_schema,'MIRROR')
+        mirror_table_sql = util.get_mirror_stage_ddls("MIRROR_DB", "MIRROR", mirror_table_name, self.mirror_schema,'MIRROR')
+        stage_table_sql = util.get_mirror_stage_ddls("STAGE_DB", "STAGE", stg_table_name, self.stage_schema,'STAGE')
 
         if isinstance(self.mirror_schema, dict):
             columns = list(self.mirror_schema.keys())
@@ -181,18 +226,23 @@ class SnowflakePipeline():
                                                                 table_name=mirror_tr_table_name)
 
         mirror_task_sql = self.get_task_sql(stream_name=mirror_tr_stream_name, task_name=mirror_task_name,
-                                            table_name=mirror_table_name)
+                                            table_name=mirror_table_name,table_schema=self.mirror_schema,layer="MIRROR")
 
         stage_stream_sql = self.get_stream_sql(stream_name=stg_stream_name, table_name=mirror_table_name)
 
         stage_task_sql = self.get_task_sql(stream_name=stg_stream_name, task_name=stg_task_name,
-                                           table_name=stg_table_name)
+                                           table_name=stg_table_name,table_schema=self.mirror_schema,layer="STAGE")
 
         file_meta_sql = self.get_file_meta_sql("MIRROR_DB", "MIRROR", mirror_tr_table_name,
                                                dataset_name_upper, "V1", "2021-01-01",
                                                "9999-12-31")
 
-        all_sqls = "\n".join([file_meta_sql, mirror_tr_table_sql, mirror_table_sql, stage_table_sql,
+        drop_sql = """
+        DROP DATABASE IF EXISTS MIRROR_DB;
+        DROP DATABASE IF EXISTS STAGE_DB;
+        DROP DATABASE IF EXISTS META_DB;
+        """
+        all_sqls = "\n".join([drop_sql,file_meta_sql, mirror_tr_table_sql, mirror_table_sql, stage_table_sql,
                               stage_sql, file_format_sql, snowpipe_sql, mirror_stream_sql,
                               mirror_validation_sql,mirror_task_sql, stage_stream_sql, stage_task_sql])
 

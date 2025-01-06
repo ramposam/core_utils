@@ -35,11 +35,12 @@ class ConfigTemplate():
             schema["CREATED_BY"] = "STRING"
             schema["UPDATED_DTS"] = "TIMESTAMP"
             schema["UPDATED_BY"] = "STRING"
+            schema["UNIQUE_HASH_ID"] = "STRING"
+            schema["ROW_HASH_ID"] = "STRING"
             schema["ACTIVE_FL"] = "STRING"
             schema["EFFECTIVE_START_DATE"] = "TIMESTAMP"
             schema["EFFECTIVE_END_DATE"] = "TIMESTAMP"
-            schema["UNIQUE_HASH_ID"] = "STRING"
-            schema["ROW_HASH_ID"] = "STRING"
+
         return schema
 
     def get_mirror_schema(self, schema):

@@ -1,6 +1,6 @@
 import logging
 
-from core_utils.constants import mirror_file_meta_cols, mirror_meta_cols
+from core_utils.constants import mirror_file_meta_cols, mirror_tr_meta_cols
 
 
 class SnowflakeUtils:
@@ -33,7 +33,7 @@ class SnowflakeUtils:
 
     def get_copy_into_table_sql(self, columns,file_extension, file_format_name, file_path=None):
 
-        cols_list_str = ",".join([f"${index+1} as {col_name.upper()}" for index, col_name in enumerate(columns) if col_name not in mirror_file_meta_cols + mirror_meta_cols ])
+        cols_list_str = ",".join([f"${index+1} as {col_name.upper()}" for index, col_name in enumerate(columns) if col_name not in mirror_file_meta_cols + mirror_tr_meta_cols ])
 
         meta_cols = []
         for col in mirror_file_meta_cols:
@@ -55,7 +55,7 @@ class SnowflakeUtils:
         logging.info(f"File format sql: {copy_sql}")
         return copy_sql
 
-    def get_mirror_stage_ddls(self, database, schema, table_name, table_schema):
+    def get_mirror_stage_ddls(self, database, schema, table_name, table_schema,layer):
 
         """
         Generate Snowflake table DDL from table name and schema.
@@ -70,6 +70,12 @@ class SnowflakeUtils:
 
         for column_name, data_type in table_schema.items():
             column_definitions.append(f"    {column_name} {data_type}")
+
+        if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
+            column_definitions.append(f"    UPDATED_DTS TIMESTAMP")
+            column_definitions.append(f"    UPDATED_BY STRING")
+            column_definitions.append(f"    UNIQUE_HASH_ID STRING")
+            column_definitions.append(f"    ROW_HASH_ID STRING")
 
         ddl += ",\n".join(column_definitions)
         ddl += "\n);"
