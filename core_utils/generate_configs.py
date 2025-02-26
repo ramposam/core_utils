@@ -13,6 +13,7 @@ class ConfigTemplate():
         self.pipeline_type = kwargs.get("pipeline_type")
         self.dataset_name = kwargs.get("dataset_name")
         self.bucket = bucket
+        self.db_type = kwargs.get("db_type","SNOWFLAKE")
         self.s3_dataset_path = kwargs.get("s3_dataset_path")
         self.start_date = kwargs.get("start_date")
         self.datetime_format = kwargs.get("datetime_format")
@@ -22,45 +23,56 @@ class ConfigTemplate():
         self.aws_secret_key = kwargs.get("aws_secret_key")
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
 
-    def add_meta_cols(self, schema, layer):
+    def add_meta_cols(self, schema, layer,db_type):
         if layer == "MIRROR":
-            schema["file_date"] = "TIMESTAMP"
-            schema["filename"] = "STRING"
-            schema["file_row_number"] = "STRING"
-            schema["file_last_modified"] = "TIMESTAMP"
-            schema["CREATED_DTS"] = "TIMESTAMP"
-            schema["CREATED_BY"] = "STRING"
+            if db_type == "POSTGRES":
+                schema['"FILE_DATE"'] = "TIMESTAMP"
+                schema['"FILE_NAME"'] = "TEXT"
+                schema['"CREATED_DTS"'] = "TIMESTAMP"
+                schema['"CREATED_BY"'] = "TEXT"
+            else:
+                schema["file_date"] = "TIMESTAMP"
+                schema["filename"] = "TEXT"
+                schema["file_row_number"] = "TEXT"
+                schema["file_last_modified"] = "TIMESTAMP"
+                schema['"CREATED_DTS"'] = "TIMESTAMP"
+                schema['"CREATED_BY"'] = "TEXT"
         else:
             schema["CREATED_DTS"] = "TIMESTAMP"
-            schema["CREATED_BY"] = "STRING"
+            schema["CREATED_BY"] = "TEXT"
             schema["UPDATED_DTS"] = "TIMESTAMP"
-            schema["UPDATED_BY"] = "STRING"
-            schema["UNIQUE_HASH_ID"] = "STRING"
-            schema["ROW_HASH_ID"] = "STRING"
-            schema["ACTIVE_FL"] = "STRING"
+            schema["UPDATED_BY"] = "TEXT"
+            schema["UNIQUE_HASH_ID"] = "TEXT"
+            schema["ROW_HASH_ID"] = "TEXT"
+            schema["ACTIVE_FL"] = "TEXT"
             schema["EFFECTIVE_START_DATE"] = "TIMESTAMP"
             schema["EFFECTIVE_END_DATE"] = "TIMESTAMP"
 
         return schema
 
-    def get_mirror_schema(self, schema):
-        mirror_schema = self.add_meta_cols(schema.copy(), "MIRROR")
+    def get_mirror_schema(self, schema,db_type="SNOWFLAKE"):
+        mirror_schema = self.add_meta_cols(schema.copy(), "MIRROR",db_type)
 
         return mirror_schema
 
     def get_file_schema(self, columns):
-        schema = {}
+        file_schema = {}
         for col_name in columns:
-            schema[col_name.replace(" ", "_").upper()] = "STRING"
-        return schema
+            file_schema[col_name.replace(" ", "_").upper()] = "TEXT"
 
-    def get_stage_schema(self, data_types):
+        file_schema = {f'"{k}"':v for k,v in file_schema.items()}
+        return file_schema
+
+    def get_stage_schema(self, data_types,db_type="SNOWFLAKE"):
         schema = {}
         for col_name, col_dtypes in data_types.items():
-            schema[col_name.replace(" ", "_").upper()] = col_dtypes["snowflake_dtype"]
+            if db_type == "POSTGRES":
+                schema[col_name.replace(" ", "_").upper()] = col_dtypes["postgres_dtype"]
+            else:
+                schema[col_name.replace(" ", "_").upper()] = col_dtypes["snowflake_dtype"]
 
-        stage_schema = self.add_meta_cols(schema, "STAGE")
-
+        stage_schema = self.add_meta_cols(schema, "STAGE",db_type)
+        stage_schema = {f'"{k}"': v for k, v in stage_schema.items()}
         return stage_schema
 
     def generate_configs(self, configs_tmp_dir):
@@ -73,11 +85,11 @@ class ConfigTemplate():
         # Get the file schema which would be used to verify table and file schema is a match
         file_schema = self.get_file_schema(data_types)
 
-        # Mirror schema is always string data types with additional file metadata columns
-        mirror_schema = self.get_mirror_schema(file_schema)
+        # Mirror schema is always TEXT data types with additional file metadata columns
+        mirror_schema = self.get_mirror_schema(file_schema,self.db_type)
 
         # Stage schema is actual data type of each column after schema inferences with additional file metadata columns
-        stage_schema = self.get_stage_schema(data_types)
+        stage_schema = self.get_stage_schema(data_types,self.db_type)
 
         dataset_name = self.dataset_name  # os.path.basename(os.path.dirname(self.file_path))
 

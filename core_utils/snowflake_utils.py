@@ -62,7 +62,7 @@ class SnowflakeUtils:
 
         :param table_name: Name of the table
         :param table_schema: Dictionary with column names as keys and data types as values
-        :return: DDL string for creating the table
+        :return: DDL TEXT for creating the table
         """
         ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
         ddl += f" CREATE TABLE IF NOT EXISTS {table_name} (\n"
@@ -73,9 +73,9 @@ class SnowflakeUtils:
 
         if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
             column_definitions.append(f"    UPDATED_DTS TIMESTAMP")
-            column_definitions.append(f"    UPDATED_BY STRING")
-            column_definitions.append(f"    UNIQUE_HASH_ID STRING")
-            column_definitions.append(f"    ROW_HASH_ID STRING")
+            column_definitions.append(f"    UPDATED_BY TEXT")
+            column_definitions.append(f"    UNIQUE_HASH_ID TEXT")
+            column_definitions.append(f"    ROW_HASH_ID TEXT")
 
         ddl += ",\n".join(column_definitions)
         ddl += "\n);"

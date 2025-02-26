@@ -11,10 +11,18 @@ PANDAS_TO_SNOWFLAKE_TYPES = {
     "float64": "FLOAT",
     "bool": "BOOLEAN",
     "datetime64[ns]": "TIMESTAMP",
-    "object": "STRING",
-    "category": "STRING"
+    "object": "TEXT",
+    "category": "TEXT"
 }
-
+# Mapping from pandas data types to Snowflake data types
+PANDAS_TO_POSTGRES_TYPES = {
+    "int64": "NUMERIC",
+    "float64": "DOUBLE PRECISION",
+    "bool": "BOOLEAN",
+    "datetime64[ns]": "TIMESTAMP",
+    "object": "TEXT",
+    "category": "TEXT"
+}
 
 def identify_delimiter(file_path):
     # Open the file and read the first 3 lines
@@ -45,10 +53,12 @@ def infer_and_convert_data_types(csv_file_path, lines_to_read=5000):
     column_data_types = {}
     for column in df.columns:
         pandas_dtype = str(df[column].dtype)
-        snowflake_dtype = PANDAS_TO_SNOWFLAKE_TYPES.get(pandas_dtype, "STRING")  # Default to STRING if no match
+        snowflake_dtype = PANDAS_TO_SNOWFLAKE_TYPES.get(pandas_dtype, "TEXT")  # Default to TEXT if no match
+        postgres_dtype = PANDAS_TO_POSTGRES_TYPES.get(pandas_dtype, "TEXT")  # Default to TEXT if no match
         column_data_types[column] = {
             "pandas_dtype": pandas_dtype,
-            "snowflake_dtype": snowflake_dtype
+            "snowflake_dtype": snowflake_dtype,
+            "postgres_dtype": postgres_dtype
         }
 
     return header, column_data_types

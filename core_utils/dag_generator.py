@@ -177,17 +177,17 @@ with DAG(
         :return: DDL string for creating the table
         """
         ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
-        ddl += f" CREATE TABLE IF NOT EXISTS {database}.{schema}.{table_name} (\n"
+        ddl += f' CREATE TABLE IF NOT EXISTS "{database}"."{schema}"."{table_name}" (\n'
         column_definitions = []
 
         for column_name, data_type in table_schema.items():
             column_definitions.append(f"    {column_name} {data_type}")
 
         if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
-            column_definitions.append(f"    UPDATED_DTS TIMESTAMP")
-            column_definitions.append(f"    UPDATED_BY STRING")
-            column_definitions.append(f"    UNIQUE_HASH_ID STRING")
-            column_definitions.append(f"    ROW_HASH_ID STRING")
+            column_definitions.append(f'    "UPDATED_DTS" TIMESTAMP')
+            column_definitions.append(f'    "UPDATED_BY" TEXT')
+            column_definitions.append(f'    "UNIQUE_HASH_ID" TEXT')
+            column_definitions.append(f'    "ROW_HASH_ID" TEXT')
 
         ddl += ",\n".join(column_definitions)
         ddl += "\n);"

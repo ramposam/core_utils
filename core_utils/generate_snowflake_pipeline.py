@@ -111,16 +111,16 @@ class SnowflakePipeline():
         file_meta_sql = f""" CREATE DATABASE IF NOT EXISTS META_DB;\n CREATE SCHEMA IF NOT EXISTS META;\n """
 
         file_meta_sql += f"""CREATE OR REPLACE TABLE META_DB.META.T_FILE_META_DETAILS ( 
-            DATABASE STRING,
-            SCHEMA STRING,
-            TABLE_NAME STRING,
-            DATASET_NAME STRING,
-            VERSION STRING,
-            ACTIVE_FL STRING,
+            DATABASE TEXT,
+            SCHEMA TEXT,
+            TABLE_NAME TEXT,
+            DATASET_NAME TEXT,
+            VERSION TEXT,
+            ACTIVE_FL TEXT,
             START_DATE DATE,
             END_DATE DATE,
             FILE_SCHEMA VARIANT,
-            CREATED_BY STRING,
+            CREATED_BY TEXT,
             CREATED_DATE TIMESTAMP);
          """
 
@@ -137,7 +137,7 @@ class SnowflakePipeline():
         CREATE TABLE IF NOT EXISTS META_DB.META.T_FILE_VALIDATION_DETAILS (
           VALIDATION_DETAIL_ID NUMBER AUTOINCREMENT START 1 INCREMENT 1,
           VALIDATION_ID NUMBER, 
-          DATASET_NAME STRING,
+          DATASET_NAME TEXT,
           MSG VARCHAR(16777216), 
           DETAILS VARIANT,
           CREATED_DTS TIMESTAMP_NTZ(9), 
@@ -178,20 +178,20 @@ class SnowflakePipeline():
     def get_all_sqls(self):
 
         dataset_name_upper = self.dataset_name.upper()
-        mirror_tr_table_name = f"MIRROR_DB.MIRROR.T_ML_{dataset_name_upper}_TR"
-        file_format_name = f"MIRROR_DB.MIRROR.FF_{dataset_name_upper}"
-        mirror_stream_name = f"MIRROR_DB.MIRROR.STREAM_{dataset_name_upper}"
-        mirror_tr_stream_name = f"MIRROR_DB.MIRROR.STREAM_{dataset_name_upper}_TR"
-        mirror_task_name = f"MIRROR_DB.MIRROR.TASK_{dataset_name_upper}"
-        mirror_tr_validation_task_name = f"MIRROR_DB.MIRROR.TASK_{dataset_name_upper}_TR_VALIDATION"
-        mirror_table_name = f"MIRROR_DB.MIRROR.T_ML_{dataset_name_upper}"
-        stg_table_name = f"STAGE_DB.STAGE.T_STG_{dataset_name_upper}"
-        stg_stream_name = f"STAGE_DB.STAGE.STREAM_{dataset_name_upper}"
-        stg_task_name = f"STAGE_DB.STAGE.TASK_{dataset_name_upper}"
+        mirror_tr_table_name = f'"MIRROR_DB"."MIRROR"."T_ML_{dataset_name_upper}_TR"'
+        file_format_name = f'"MIRROR_DB"."MIRROR"."FF_{dataset_name_upper}"'
+        mirror_stream_name = f'"MIRROR_DB"."MIRROR"."STREAM_{dataset_name_upper}"'
+        mirror_tr_stream_name = f'"MIRROR_DB"."MIRROR"."STREAM_{dataset_name_upper}_TR"'
+        mirror_task_name = f'"MIRROR_DB"."MIRROR"."TASK_{dataset_name_upper}"'
+        mirror_tr_validation_task_name = f'"MIRROR_DB"."MIRROR"."TASK_{dataset_name_upper}_TR_VALIDATION"'
+        mirror_table_name = f'"MIRROR_DB"."MIRROR"."T_ML_{dataset_name_upper}"'
+        stg_table_name = f'"STAGE_DB"."STAGE"."T_STG_{dataset_name_upper}"'
+        stg_stream_name = f'"STAGE_DB"."STAGE"."STREAM_{dataset_name_upper}"'
+        stg_task_name = f'"STAGE_DB"."STAGE"."TASK_{dataset_name_upper}"'
 
         if self.aws_access_key and self.aws_secret_key:
             stage_sql = self.get_stage_sql()
-            stage_name = f"MIRROR_DB.MIRROR.STG_{dataset_name_upper}_S3"
+            stage_name = f'"MIRROR_DB"."MIRROR"."STG_{dataset_name_upper}_S3"'
         else:
             stage_sql = ""
             stage_name = self.snowflake_stage_name

@@ -1,8 +1,8 @@
 
 
 
-CREATE OR REPLACE PROCEDURE META_DB.META.VALIDATE_FILE_AND_TABLE(dataset_name STRING,stage_name STRING,database STRING,schema STRING,  table_name STRING,run_date STRING,header_row_no NUMBER)
-RETURNS STRING
+CREATE OR REPLACE PROCEDURE META_DB.META.VALIDATE_FILE_AND_TABLE(dataset_name TEXT,stage_name TEXT,database TEXT,schema TEXT,  table_name TEXT,run_date TEXT,header_row_no NUMBER)
+RETURNS TEXT
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.8'
 PACKAGES = ('snowflake-snowpark-python')
