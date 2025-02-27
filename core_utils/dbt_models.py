@@ -27,7 +27,8 @@ class DBTMirrorModel():
             sql_content = f"""
     {{{{ config(
         materialized="{materialization}",
-        unique_key={unique_key},
+        unique_key={[f'"{col}"' for col in unique_key]},
+        incremental_strategy="merge",  
         schema="{schema}",
         database="{database}"
     ) }}}}
@@ -40,13 +41,13 @@ WITH {dataset_name} AS (
     {{{{  get_table_columns(this,excluded_columns)  }}}},
     md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
     md5({{{{  generate_row_hash_id(this,row_hash_excluded_columns)  }}}}) as row_hash_id,
-    current_timestamp() as CREATED_DTS,
-    current_user() as CREATED_BY,
-    current_timestamp() as UPDATED_DTS,
-    current_user() as UPDATED_BY
+    current_timestamp as CREATED_DTS,
+    current_user as CREATED_BY,
+    current_timestamp as UPDATED_DTS,
+    current_user as UPDATED_BY
 
     FROM {{{{ source('mirror_{dataset_name}', '{table_name}_TR') }}}}
-    where file_date = '{{{{ var("run_date")  }}}}'
+    where "FILE_DATE" = '{{{{ var("run_date")  }}}}'
 )
 SELECT *
 FROM {dataset_name}
@@ -92,14 +93,14 @@ FROM {dataset_name}
         mirror_template["models"][0].update({"tests": [{"unique": {"column_name": unique_table_level_column_tests,
                                                                    "name": f"""{dataset_name}_{table_name}_unique""".upper(),
                                                                    "config": {"severity": "WARN",
-                                                                              "where": """file_date = '{{ var("run_date") }}'"""}}}]})
+                                                                              "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
 
         columns_test = []
         for column in unique_keys:
             columns_test.append({"name": column,
                                  "tests": [{"not_null": {"name": f"""{table_name}_{column}_not_null""".upper(),
                                                          "config": {"severity": "WARN",
-                                                                    "where": """file_date = '{{ var("run_date") }}'"""}}}]})
+                                                                    "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
 
         mirror_template["models"][0].update({"columns": columns_test})
         return mirror_template
@@ -152,7 +153,8 @@ FROM {dataset_name}
         sql_content = f"""
             {{{{ config(
                 materialized="{materialization}",
-                unique_key={unique_key},
+                unique_key={[f'"{col}"' for col in unique_key]},
+                incremental_strategy="merge",  
                 schema="{schema}",
                 database="{database}"
             ) }}}}
@@ -168,7 +170,7 @@ FROM {dataset_name}
         AS ( 
         SELECT * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID) 
         FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
-        where file_date = '{{{{ var("run_date")  }}}}'
+        where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
         )""")
 
         for transformation in transformations:
