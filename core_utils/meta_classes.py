@@ -10,16 +10,16 @@ class DatasetConfigs:
     tasks: List[str] = field(
         default_factory=lambda: ["acq_task",
                                  "download_task",
-                                 "move_task",
-                                 "schema_check_task",
-                                 "copy_task",
-                                 "file_mirror_check_task",
-                                 "mirror_task",
-                                 "stage_task"])
+                                 "move_to_snowflake_task",
+                                 "snowflake_schema_check_task",
+                                 "copy_to_snowflake_task",
+                                 "snowflake_file_mirror_data_check_task",
+                                 "snowflake_mirror_task",
+                                 "snowflake_stage_task"])
     mirror_layer: Dict = field(default_factory=lambda: {"database": "MIRROR_DB", "schema": "MIRROR"})
     stage_layer: Dict = field(default_factory=lambda: {"database": "STAGE_DB", "schema": "STAGE"})
     s3_connection_id: str = field(default="S3_CONN_ID")
-    snowflake_connection_id: str = field(default="SNOWFLAKE_CONN_ID")
+    db_conn_id: str = field(default="SNOWFLAKE_CONN_ID")
     start_date: str = field(default=datetime.strftime(datetime.today(),"%Y,%m,%d"))
     load_historical_data : str = field(default=False)
     schedule_interval: Optional[str] = field(default="0 23 * * 1-5")

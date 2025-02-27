@@ -26,17 +26,17 @@ class ConfigTemplate():
     def add_meta_cols(self, schema, layer,db_type):
         if layer == "MIRROR":
             if db_type == "POSTGRES":
-                schema['"FILE_DATE"'] = "TIMESTAMP"
-                schema['"FILE_NAME"'] = "TEXT"
-                schema['"CREATED_DTS"'] = "TIMESTAMP"
-                schema['"CREATED_BY"'] = "TEXT"
+                schema['FILE_DATE'] = "TIMESTAMP"
+                schema['FILE_NAME'] = "TEXT"
+                schema['CREATED_DTS'] = "TIMESTAMP"
+                schema['CREATED_BY'] = "TEXT"
             else:
                 schema["file_date"] = "TIMESTAMP"
                 schema["filename"] = "TEXT"
                 schema["file_row_number"] = "TEXT"
                 schema["file_last_modified"] = "TIMESTAMP"
-                schema['"CREATED_DTS"'] = "TIMESTAMP"
-                schema['"CREATED_BY"'] = "TEXT"
+                schema['CREATED_DTS'] = "TIMESTAMP"
+                schema['CREATED_BY'] = "TEXT"
         else:
             schema["CREATED_DTS"] = "TIMESTAMP"
             schema["CREATED_BY"] = "TEXT"
@@ -60,7 +60,7 @@ class ConfigTemplate():
         for col_name in columns:
             file_schema[col_name.replace(" ", "_").upper()] = "TEXT"
 
-        file_schema = {f'"{k}"':v for k,v in file_schema.items()}
+        file_schema = {f'{k}':v for k,v in file_schema.items()}
         return file_schema
 
     def get_stage_schema(self, data_types,db_type="SNOWFLAKE"):
@@ -72,7 +72,7 @@ class ConfigTemplate():
                 schema[col_name.replace(" ", "_").upper()] = col_dtypes["snowflake_dtype"]
 
         stage_schema = self.add_meta_cols(schema, "STAGE",db_type)
-        stage_schema = {f'"{k}"': v for k, v in stage_schema.items()}
+        stage_schema = {f'{k}': v for k, v in stage_schema.items()}
         return stage_schema
 
     def generate_configs(self, configs_tmp_dir):
@@ -162,7 +162,20 @@ class ConfigTemplate():
             if len(dataset_configs_path) > 255:
                 dataset_configs_path = r'\\?\{}'.format(dataset_configs_path)
 
-            ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
+            if self.db_type == "POSTGRES":
+                ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
+                                            start_date=self.start_date, load_historical_data=self.catchup,
+                                            snowflake_stage_name="",
+                                            db_conn_id = "POSTGRES_CONN_ID_MIRROR",
+                                            tasks=["acq_task",
+                                                 "download_task",
+                                                 "postgres_schema_check_task",
+                                                 "copy_to_postgres_task",
+                                                 "postgres_file_mirror_data_check_task",
+                                                 "postgres_mirror_task",
+                                                 "postgres_stage_task"])
+            else:
+                ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
                                         start_date=self.start_date, load_historical_data=self.catchup,
                                         snowflake_stage_name=f"STG_{dataset_name}".upper())
 

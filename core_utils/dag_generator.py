@@ -3,6 +3,7 @@ from pathlib import Path
 
 from constants.constants import default_args, dag_template
 from core_utils.config_reader import ConfigReader
+from core_utils.constants import mirror_file_meta_cols
 from core_utils.file_utils import write_to_file
 
 
@@ -20,20 +21,30 @@ class DagGenerator:
                 dag_template += "from operators.acquisition_operator import AcquisitionOperator" + "\n"
             elif task == "download_task":
                 dag_template += "from operators.download_operator import DownloadOperator" + "\n"
-            elif task == "move_task":
+            elif task == "move_to_snowflake_task":
                 dag_template += "from operators.move_file_to_snowflake_operator import MoveFileToSnowflakeOperator" + "\n"
-            elif task == "copy_task":
+            elif task == "copy_to_snowflake_task":
                 dag_template += "from operators.snowflake_copy_operator import SnowflakeCopyOperator" + "\n"
-            elif task == "mirror_task":
-                dag_template += "from operators.mirror_load_operator import MirrorLoadOperator" + "\n"
-            elif task == "schema_check_task":
-                dag_template += "from operators.file_table_schema_check_operator import FileTableSchemaCheckOperator" + "\n"
-            elif task == "stage_task":
-                dag_template += "from operators.stage_load_operator import StageLoadOperator" + "\n"
-            elif task == "file_mirror_check_task":
-                dag_template += "from operators.file_table_data_check_operator import FileTableDataCheckOperator" + "\n"
+            elif task == "snowflake_mirror_task":
+                dag_template += "from operators.snowflake_load_to_mirror_operator import SnowflakeLoadToMirrorOperator" + "\n"
+            elif task == "snowflake_schema_check_task":
+                dag_template += "from operators.file_snowflake_table_schema_check_operator import FileSnowflakeTableSchemaCheckOperator" + "\n"
+            elif task == "snowflake_stage_task":
+                dag_template += "from operators.snowflake_load_to_stage_operator import SnowflakeLoadToStageOperator" + "\n"
+            elif task == "snowflake_file_mirror_data_check_task":
+                dag_template += "from operators.file_snowflake_table_data_check_operator import FileSnowflakeTableDataCheckOperator" + "\n"
+            elif task == "copy_to_postgres_task":
+                dag_template += "from operators.copy_file_to_postgres_operator import CopyFileToPostgresOperator" + "\n"
+            elif task == "postgres_mirror_task":
+                dag_template += "from operators.postgres_load_to_mirror_operator import PostgresLoadToMirrorOperator" + "\n"
+            elif task == "postgres_schema_check_task":
+                dag_template += "from operators.file_postgres_table_schema_check_operator import FilePostgresTableSchemaCheckOperator" + "\n"
+            elif task == "postgres_stage_task":
+                dag_template += "from operators.postgres_load_to_stage_operator import PostgresLoadToStageOperator" + "\n"
+            elif task == "postgres_file_mirror_data_check_task":
+                dag_template += "from operators.file_postgres_table_data_check_operator import FilePostgresTableDataCheckOperator" + "\n"
 
-        datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
+        datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper().replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
 
         dag_template += default_args
 
@@ -85,19 +96,19 @@ with DAG(
             datetime_pattern="{datetime_format}"
         )
             """
-        if "move_task" in dataset_configs["tasks"]:
+        if "move_to_snowflake_task" in dataset_configs["tasks"]:
             dag_template += f"""
-        move_task = MoveFileToSnowflakeOperator(
+        move_to_snowflake_task = MoveFileToSnowflakeOperator(
             task_id="move_file_to_snowflake_internal_stage",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}"
         )
             """
-        if "schema_check_task" in dataset_configs["tasks"]:
+        if "snowflake_schema_check_task" in dataset_configs["tasks"]:
             dag_template += f"""
-        schema_check_task = FileTableSchemaCheckOperator(
+        snowflake_schema_check_task = FileSnowflakeTableSchemaCheckOperator(
             task_id="check_schema_of_config_n_received_file",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
@@ -107,51 +118,111 @@ with DAG(
         )
             """
 
-        if "copy_task" in dataset_configs["tasks"]:
+        if "postgres_schema_check_task" in dataset_configs["tasks"]:
             dag_template += f"""
-        copy_task = SnowflakeCopyOperator(
-            task_id="copy_data_from_internal_stage",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+        postgres_schema_check_task = FilePostgresTableSchemaCheckOperator(
+            task_id="check_schema_of_config_n_received_file",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
-            dataset_name="{dataset_configs["dataset_name"]}",
-            stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
-            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
-        )
-            """
-
-        if "file_mirror_check_task" in dataset_configs["tasks"]:
-            dag_template += f"""
-        file_mirror_check_task = FileTableDataCheckOperator(
-            task_id="check_file_n_mirror_table_data",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
-            dataset_name="{dataset_configs["dataset_name"]}",
-            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
-        )
-            """
-
-        if "mirror_task" in dataset_configs["tasks"]:
-            dag_template += f"""
-        mirror_task = MirrorLoadOperator(
-            task_id="load_to_mirror_table",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
 
-        if "stage_task" in dataset_configs["tasks"]:
+        if "copy_to_snowflake_task" in dataset_configs["tasks"]:
             dag_template += f"""
-        stage_task = StageLoadOperator(
+        copy_to_snowflake_task = SnowflakeCopyOperator(
+            task_id="copy_data_from_internal_stage",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}",
+            stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
+            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
+        )
+            """
+
+        if "copy_to_postgres_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        copy_to_postgres_task = CopyFileToPostgresOperator(
+            task_id="copy_data_from_file_to_postgres",
+            db_conn_id="{dataset_configs["db_conn_id"]}",            
+            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR",
+            file_format_params={dataset_configs["mirror"]["v1"]["file_format_params"]},
+            datetime_pattern="{dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper()}"
+        )
+            """
+
+        if "snowflake_file_mirror_data_check_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        snowflake_file_mirror_data_check_task = FileSnowflakeTableDataCheckOperator(
+            task_id="check_file_n_mirror_table_data",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}",
+            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
+        )
+            """
+
+        if "postgres_file_mirror_data_check_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        postgres_file_mirror_data_check_task = FilePostgresTableDataCheckOperator(
+            task_id="check_file_n_mirror_table_data",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}",
+            table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
+        )
+            """
+
+        if "snowflake_mirror_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        snowflake_mirror_task = SnowflakeLoadToMirrorOperator(
+            task_id="load_to_mirror_table",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "postgres_mirror_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        postgres_mirror_task = PostgresLoadToMirrorOperator(
+            task_id="load_to_mirror_table",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "snowflake_stage_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        snowflake_stage_task = SnowflakeLoadToStageOperator(
             task_id="load_to_stage_table",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            snowflake_conn_id="{dataset_configs["snowflake_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "postgres_stage_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        postgres_stage_task = PostgresLoadToStageOperator(
+            task_id="load_to_stage_table",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}"
@@ -181,7 +252,10 @@ with DAG(
         column_definitions = []
 
         for column_name, data_type in table_schema.items():
-            column_definitions.append(f"    {column_name} {data_type}")
+            if not '"' in column_name and column_name not in mirror_file_meta_cols:
+                column_definitions.append(f'    "{column_name}" {data_type}')
+            else:
+                column_definitions.append(f"    {column_name} {data_type}")
 
         if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
             column_definitions.append(f'    "UPDATED_DTS" TIMESTAMP')
