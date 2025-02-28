@@ -1,13 +1,15 @@
 import json
 import os
 from pathlib import Path
-
+import logging
 from ruamel.yaml import YAML
 
 
 class DBTMirrorModel():
-    def __init__(self, configs):
+    def __init__(self, configs, layer,db_type):
         self.configs = configs
+        self.layer = layer
+        self.db_type = db_type
 
     def generate_mirror_model(self, table_name, model_path, materialization, dataset_name, unique_key, schema,
                               database):
@@ -39,12 +41,12 @@ class DBTMirrorModel():
 WITH {dataset_name} AS (
     SELECT  
     {{{{  get_table_columns(this,excluded_columns)  }}}},
-    md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
-    md5({{{{  generate_row_hash_id(this,row_hash_excluded_columns)  }}}}) as row_hash_id,
-    current_timestamp as CREATED_DTS,
-    current_user as CREATED_BY,
-    current_timestamp as UPDATED_DTS,
-    current_user as UPDATED_BY
+    md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
+    md5({{{{  generate_row_hash_id(this,row_hash_excluded_columns)  }}}}) as "ROW_HASH_ID",
+    current_timestamp as "CREATED_DTS",
+    current_user as "CREATED_BY",
+    current_timestamp as "UPDATED_DTS",
+    current_user as "UPDATED_BY"
 
     FROM {{{{ source('mirror_{dataset_name}', '{table_name}_TR') }}}}
     where "FILE_DATE" = '{{{{ var("run_date")  }}}}'
@@ -56,9 +58,9 @@ FROM {dataset_name}
             with open(model_path, 'w', encoding='utf-8') as sql_file:
                 sql_file.write(sql_content.strip())
 
-            print(f"Successfully generated dbt model SQL at {model_path}")
+            logging.info(f"Successfully generated dbt model SQL at {model_path}")
         except Exception as e:
-            print(f"Error: {e}")
+            logging.info(f"Error: {e}")
 
     def convert_json_to_yaml_preserve_order(self, json_data, yaml_file_path):
         """
@@ -77,9 +79,9 @@ FROM {dataset_name}
             with open(yaml_file_path, 'w', encoding='utf-8') as yaml_file:
                 yaml.dump(json_data, yaml_file)
 
-            print(f"Successfully converted json data to {yaml_file_path} with preserved order.")
+            logging.info(f"Successfully converted json data to {yaml_file_path} with preserved order.")
         except Exception as e:
-            print(f"Error: {e}")
+            logging.info(f"Error: {e}")
 
     def get_tests_yml(self, dataset_name, table_name, unique_keys, layer):
 
@@ -147,7 +149,7 @@ FROM {dataset_name}
 
     def getnerate_stage_model(self, table_name, mirror_table, model_path, materialization, dataset_name, unique_key,
                               schema,
-                              database, transformations):
+                              database, transformations, mirror_db, mirror_schema,db_type):
 
         # Generate the dbt model SQL content
         sql_content = f"""
@@ -159,19 +161,33 @@ FROM {dataset_name}
                 database="{database}"
             ) }}}}
 
-        {{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS','UPDATED_DTS', 'UPDATED_BY', 'UNIQUE_HASH_ID','ROW_HASH_ID'] -%}}
+        {{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS','UPDATED_DTS', 'UPDATED_BY', 'UNIQUE_HASH_ID','ROW_HASH_ID',"ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}}
+        
+        {{%- set src_excluded_columns =  ["CREATED_BY","CREATED_DTS","UPDATED_DTS", "UPDATED_BY","FILENAME","FILE_NAME","FILE_DATE","FILE_ROW_NUMBER","FILE_LAST_MODIFIED","UNIQUE_HASH_ID","ROW_HASH_ID","ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}} 
+        
         """
 
         cte_queries = []
         cte_index = 0
 
-        # Base CTE
-        cte_queries.append(f""" cte_{cte_index} 
-        AS ( 
-        SELECT * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID) 
-        FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
-        where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
-        )""")
+        if db_type == "POSTGRES":
+            # Base CTE
+            cte_queries.append(f""" cte_{cte_index} 
+            AS ( 
+            SELECT 
+             {{{{  generate_columns_with_types("{schema}","{table_name}",src_excluded_columns)  }}}}
+            FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
+            where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
+            )""")
+        else:
+            # Base CTE
+            cte_queries.append(f""" cte_{cte_index} 
+                    AS ( 
+                    SELECT 
+                    * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID)
+                    FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
+                    where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
+                    )""")
 
         for transformation in transformations:
             cte_index += 1
@@ -210,21 +226,38 @@ FROM {dataset_name}
 
             cte_queries.append(f"cte_{cte_index} AS (\n    {query}\n)")
 
-        # Final query
-        with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
-        SELECT *, 
-            'Y' as active_fl,
-            '{{{{ var("run_date") }}}}' as effective_start_date ,
-            '9999-12-31' as effective_end_date,
-            md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as unique_hash_id,
-            md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as row_hash_id,
-            current_timestamp() as CREATED_DTS,
-            current_user() as CREATED_BY,
-            current_timestamp() as UPDATED_DTS,
-            current_user() as UPDATED_BY
-       FROM cte_{cte_index}     
+        if db_type == "POSTGRES":
+            # Final query
+            with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
+            SELECT *, 
+                'Y' as "ACTIVE_FL",
+                '{{{{ var("run_date") }}}}'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_START_DATE" ,
+                '9999-12-31'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_END_DATE",
+                md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
+                md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
+                current_timestamp as "CREATED_DTS",
+                current_user as "CREATED_BY",
+                current_timestamp as "UPDATED_DTS",
+                current_user as "UPDATED_BY"
+           FROM cte_{cte_index}     
+    
+        """
+        else:
+            # Final query
+            with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
+                    SELECT *, 
+                        'Y' as "ACTIVE_FL",
+                        '{{{{ var("run_date") }}}}' as "EFFECTIVE_START_DATE" ,
+                        '9999-12-31' as "EFFECTIVE_END_DATE",
+                        md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
+                        md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
+                        current_timestamp as "CREATED_DTS",
+                        current_user as "CREATED_BY",
+                        current_timestamp as "UPDATED_DTS",
+                        current_user as "UPDATED_BY"
+                   FROM cte_{cte_index}     
 
-    """
+                """
 
         sql_content = sql_content + "\n" + with_query
 
@@ -232,7 +265,7 @@ FROM {dataset_name}
         with open(model_path, 'w', encoding='utf-8') as sql_file:
             sql_file.write(sql_content.strip())
 
-        print(f"Successfully generated dbt model SQL at {model_path}")
+        logging.info(f"Successfully generated dbt model SQL at {model_path}")
 
     def generate(self):
 
@@ -240,52 +273,61 @@ FROM {dataset_name}
         models_path = os.path.join(current_dir, "dbt", "models")
 
         Path(models_path).mkdir(exist_ok=True, parents=True)
-
         dataset_name = list(self.configs.keys())[0]
-        mirror_dir = os.path.join(models_path, "mirror", dataset_name)
-        stage_dir = os.path.join(models_path, "stage", dataset_name)
-
-        Path(mirror_dir).mkdir(exist_ok=True, parents=True)
-        Path(stage_dir).mkdir(exist_ok=True, parents=True)
 
         mirror_configs = self.configs[dataset_name]["mirror"]
-        stage_configs = self.configs[dataset_name]["stage"]
 
-        mirror_table = mirror_configs["table_name"]
-        stage_table = stage_configs["table_name"]
+        if self.layer == "mirror":
+            mirror_dir = os.path.join(models_path, "mirror", dataset_name)
+            Path(mirror_dir).mkdir(exist_ok=True, parents=True)
 
-        unique_keys = mirror_configs["unique_keys"]
+            mirror_table = mirror_configs["table_name"]
+            unique_keys = mirror_configs["unique_keys"]
+            self.generate_mirror_source(mirror_table, mirror_dir, dataset_name, mirror_configs["database"],
+                                        mirror_configs["schema"])
+            self.generate_mirror_tests(mirror_table, unique_keys, mirror_dir, dataset_name)
+            mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
 
-        self.generate_mirror_source(mirror_table, mirror_dir, dataset_name, mirror_configs["database"],
-                                    mirror_configs["schema"])
+            self.generate_mirror_model(table_name=mirror_table,
+                                       materialization="incremental",
+                                       model_path=mirror_model_table_path,
+                                       dataset_name=dataset_name,
+                                       database=mirror_configs["database"],
+                                       schema=mirror_configs["schema"],
+                                       unique_key=unique_keys)
 
-        self.generate_mirror_tests(mirror_table, unique_keys, mirror_dir, dataset_name)
+        elif self.layer == "stage":
 
-        mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
+            mirror_table = mirror_configs["table_name"]
+            mirror_configs = self.configs[dataset_name]["mirror"]
+            unique_keys = mirror_configs["unique_keys"]
 
-        self.generate_mirror_model(table_name=mirror_table,
-                                   materialization="incremental",
-                                   model_path=mirror_model_table_path,
-                                   dataset_name=dataset_name,
-                                   database=mirror_configs["database"],
-                                   schema=mirror_configs["schema"],
-                                   unique_key=unique_keys)
+            stage_dir = os.path.join(models_path, "stage", dataset_name)
 
-        self.generate_stage_source(mirror_table, stage_dir, dataset_name, mirror_configs["database"],
-                                   mirror_configs["schema"])
+            Path(stage_dir).mkdir(exist_ok=True, parents=True)
 
-        self.generate_stage_tests(stage_table, unique_keys, stage_dir, dataset_name)
+            stage_configs = self.configs[dataset_name]["stage"]
 
-        stage_model_table_path = os.path.join(stage_dir, f"{stage_table}.sql")
+            stage_table = stage_configs["table_name"]
 
-        self.getnerate_stage_model(table_name=stage_table,
-                                   mirror_table=mirror_table,
-                                   materialization="incremental",
-                                   model_path=stage_model_table_path,
-                                   dataset_name=dataset_name,
-                                   database=stage_configs["database"],
-                                   schema=stage_configs["schema"],
-                                   unique_key=unique_keys,
-                                   transformations=stage_configs["transformations"])
+            self.generate_stage_source(mirror_table, stage_dir, dataset_name, mirror_configs["database"],
+                                       mirror_configs["schema"])
+
+            self.generate_stage_tests(stage_table, unique_keys, stage_dir, dataset_name)
+
+            stage_model_table_path = os.path.join(stage_dir, f"{stage_table}.sql")
+
+            self.getnerate_stage_model(table_name=stage_table,
+                                       mirror_table=mirror_table,
+                                       materialization="incremental",
+                                       model_path=stage_model_table_path,
+                                       dataset_name=dataset_name,
+                                       database=stage_configs["database"],
+                                       schema=stage_configs["schema"],
+                                       unique_key=unique_keys,
+                                       transformations=stage_configs["transformations"],
+                                       mirror_db=mirror_configs["database"],
+                                       mirror_schema=mirror_configs["schema"],
+                                       db_type=self.db_type)
 
 

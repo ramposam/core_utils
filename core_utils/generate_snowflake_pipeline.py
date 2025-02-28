@@ -3,7 +3,7 @@ import json
 from core_utils.constants import snowflake_stage_template, snowflake_pipe_template, mirror_addl_meta_cols, \
     stage_addl_meta_cols
 from core_utils.snowflake_utils import SnowflakeUtils
-
+import logging
 
 class SnowflakePipeline():
     def __init__(self, **kwargs):
@@ -103,7 +103,7 @@ class SnowflakePipeline():
         return merge_stmt
 
     def get_file_meta_sql(self, database, schema, table_name,dataset_name, version, start_date, end_date):
-        print(self.file_schema)
+        logging.info(self.file_schema)
         indexed_file_schema = []
         for key, val in self.file_schema.items():
             indexed_file_schema.append({key: val})

@@ -98,9 +98,9 @@ def write_to_json_file(data, file_path):
     try:
         with open(file_path, 'w') as json_file:
             json.dump(data, json_file, indent=4)
-        print(f"Data successfully written to {file_path}")
+        logging.info(f"Data successfully written to {file_path}")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.info(f"An error occurred: {e}")
 
 def write_to_file(data, file_path):
     """
@@ -110,9 +110,9 @@ def write_to_file(data, file_path):
     try:
         with open(file_path, 'w') as file:
             file.write(data)
-        print(f"Data successfully written to {file_path}")
+        logging.info(f"Data successfully written to {file_path}")
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.info(f"An error occurred: {e}")
 
 
 def get_file_name_pattern(file_name):

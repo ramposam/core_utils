@@ -166,14 +166,16 @@ class ConfigTemplate():
                 ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
                                             start_date=self.start_date, load_historical_data=self.catchup,
                                             snowflake_stage_name="",
-                                            db_conn_id = "POSTGRES_CONN_ID_MIRROR",
+                                            db_conn_id = "POSTGRES_CONN_ID",
                                             tasks=["acq_task",
                                                  "download_task",
                                                  "postgres_schema_check_task",
                                                  "copy_to_postgres_task",
                                                  "postgres_file_mirror_data_check_task",
                                                  "postgres_mirror_task",
-                                                 "postgres_stage_task"])
+                                                 "postgres_stage_task"],
+                                            mirror_layer ={"database": "COMMON_DB", "schema": "MIRROR"},
+                                            stage_layer={"database": "COMMON_DB", "schema": "STAGE"})
             else:
                 ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
                                         start_date=self.start_date, load_historical_data=self.catchup,

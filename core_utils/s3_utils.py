@@ -1,7 +1,7 @@
 import os
 import boto3
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-
+import logging
 
 def download_s3_folder(s3_conn_id, bucket_name, s3_folder, local_dir):
     """
@@ -24,7 +24,7 @@ def download_s3_folder(s3_conn_id, bucket_name, s3_folder, local_dir):
     pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_folder)
 
     for page in pages:
-        print(page)
+        logging.info(page)
         if 'Contents' in page:
             for obj in page['Contents']:
                 s3_key = obj['Key']
@@ -34,5 +34,5 @@ def download_s3_folder(s3_conn_id, bucket_name, s3_folder, local_dir):
                 os.makedirs(os.path.dirname(local_file_path), exist_ok=True)
 
                 # Download the file
-                print(f"Downloading {s3_key} to {local_file_path}")
+                logging.info(f"Downloading {s3_key} to {local_file_path}")
                 s3_client.download_file(bucket_name, s3_key, local_file_path)
