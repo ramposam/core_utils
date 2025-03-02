@@ -22,6 +22,7 @@ class ConfigTemplate():
         self.aws_access_key = kwargs.get("aws_access_key")
         self.aws_secret_key = kwargs.get("aws_secret_key")
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
+        self.encoding = kwargs.get("encoding")
 
     def add_meta_cols(self, schema, layer,db_type):
         if layer == "MIRROR":
@@ -175,11 +176,13 @@ class ConfigTemplate():
                                                  "postgres_mirror_task",
                                                  "postgres_stage_task"],
                                             mirror_layer ={"database": "COMMON_DB", "schema": "MIRROR"},
-                                            stage_layer={"database": "COMMON_DB", "schema": "STAGE"})
+                                            stage_layer={"database": "COMMON_DB", "schema": "STAGE"},
+                                            schedule_interval=self.schedule_interval)
             else:
                 ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
                                         start_date=self.start_date, load_historical_data=self.catchup,
-                                        snowflake_stage_name=f"STG_{dataset_name}".upper())
+                                        snowflake_stage_name=f"STG_{dataset_name}".upper(),
+                                            schedule_interval=self.schedule_interval)
 
             write_to_json_file(data=ds_configs.__dict__, file_path=dataset_configs_path)
 
@@ -216,7 +219,8 @@ class ConfigTemplate():
                                                  file_schema=file_schema,
                                                  file_name_pattern=file_name_pattern,
                                                  file_path=self.s3_dataset_path,
-                                                 datetime_pattern=datetime_pattern)
+                                                 datetime_pattern=datetime_pattern,
+                                                 encoding=self.encoding)
 
             write_to_json_file(data=ds_mirror_v1_configs.__dict__, file_path=dataset_configs_mirror_v1_path)
 

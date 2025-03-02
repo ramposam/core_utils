@@ -113,6 +113,7 @@ with DAG(
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
         )
@@ -126,7 +127,8 @@ with DAG(
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
-            dataset_name="{dataset_configs["dataset_name"]}"
+            dataset_name="{dataset_configs["dataset_name"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}"
         )
             """
 
@@ -139,6 +141,7 @@ with DAG(
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
         )
@@ -148,7 +151,8 @@ with DAG(
             dag_template += f"""
         copy_to_postgres_task = CopyFileToPostgresOperator(
             task_id="copy_data_from_file_to_postgres",
-            db_conn_id="{dataset_configs["db_conn_id"]}",            
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",            
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR",
             file_format_params={dataset_configs["mirror"]["v1"]["file_format_params"]},
             datetime_pattern="{dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper()}"
@@ -164,6 +168,7 @@ with DAG(
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
         )
             """
@@ -177,6 +182,7 @@ with DAG(
             bucket_name="{dataset_configs["bucket"]}",
             s3_configs_path="dataset_configs/dev/",
             dataset_name="{dataset_configs["dataset_name"]}",
+            encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
         )
             """

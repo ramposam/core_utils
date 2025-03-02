@@ -43,6 +43,7 @@ class DatasetMirror:
     file_schema: Dict
     file_name_pattern: str
     file_path: str
+    encoding: str = field(default="UTF-8")
     datetime_pattern: str = field(default="YYYY-MM-DD")
 
 
