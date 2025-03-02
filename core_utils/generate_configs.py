@@ -208,7 +208,7 @@ class ConfigTemplate():
             if len(dataset_configs_mirror_v1_path) > 255:
                 dataset_configs_mirror_v1_path = r'\\?\{}'.format(dataset_configs_mirror_v1_path)
 
-            file_name_pattern, datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path))
+            file_name_pattern, datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path),self.datetime_format)
             datetime_pattern = self.datetime_format if self.datetime_format else datetime_pattern.replace("%Y",
                                                                                                           "YYYY").replace(
                 "%m", "MM").replace("%d", "DD")

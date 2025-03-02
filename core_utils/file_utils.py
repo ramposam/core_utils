@@ -115,40 +115,59 @@ def write_to_file(data, file_path):
         logging.info(f"An error occurred: {e}")
 
 
-def get_file_name_pattern(file_name):
-  """
-  Extracts the filename pattern from a given file name.
+import re
 
-  Args:
-    file_name: The name of the file.
 
-  Returns:
-    A string representing the filename pattern.
-    Includes placeholders for datetime components if found.
-  """
+def get_file_name_pattern(file_name, file_date_format=None):
+    """
+    Extracts the filename pattern from a given file name.
 
-  pattern = file_name
-  date_format = ""
-  # Check for datetime patterns
-  datetime_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}-\d{4})|(\d{4}\d{2}\d{2})|(\d{2}\d{2}\d{4})", file_name)
-  if datetime_match:
-    if re.match(r"\d{4}-\d{2}-\d{2}", datetime_match.group(0)):
-      date_format = "%Y-%m-%d"
-    elif re.match(r"\d{2}-\d{2}-\d{4}", datetime_match.group(0)):
-      date_format = "%d-%m-%Y"
-    elif re.match(r"\d{4}\d{2}\d{2}", datetime_match.group(0)):
-      date_format = "%Y%m%d"
-    elif re.match(r"\d{2}\d{2}\d{4}", datetime_match.group(0)):
-      date_format = "%d%m%Y"
+    Args:
+        file_name (str): The name of the file.
+        file_date_format (str, optional): Expected date format (e.g., "yyyy-mm-dd", "yyyy-mm", "yyyy").
 
-    if date_format:
-      pattern = re.sub(r"\d{4}-\d{2}-\d{2}", "{datetime_pattern}", pattern)
-      pattern = re.sub(r"\d{2}-\d{2}-\d{4}", "{datetime_pattern}", pattern)
-      pattern = re.sub(r"\d{4}\d{2}\d{2}", "{datetime_pattern}", pattern)
-      pattern = re.sub(r"\d{2}\d{2}\d{4}", "{datetime_pattern}", pattern)
+    Returns:
+        tuple: A string representing the filename pattern with placeholders, and the detected date format.
+    """
 
-  # Replace other potential variable parts with placeholders
-  # (e.g., user IDs, counters)
-  # pattern = re.sub(r"[a-zA-Z0-9]{3,}", "{var}", pattern)
+    pattern = file_name
+    date_format = ""
 
-  return pattern,date_format
+    # If a custom file_date_format is provided, convert to regex pattern
+    if file_date_format:
+        format_map = {
+            "YYYY": r"\d{4}",
+            "MM": r"\d{2}",
+            "DD": r"\d{2}"
+        }
+
+        regex_pattern = file_date_format
+        for key, value in format_map.items():
+            regex_pattern = regex_pattern.replace(key, value)
+
+        datetime_match = re.search(regex_pattern, file_name)
+        if datetime_match:
+            date_format = file_date_format.replace("YYYY", "%Y").replace("MM", "%m").replace("DD", "%d")
+            pattern = re.sub(regex_pattern, "{datetime_pattern}", pattern)
+
+    else:
+        # Default behavior: Detect common date patterns in filenames
+        datetime_match = re.search(r"(\d{4}-\d{2}-\d{2})|(\d{2}-\d{2}-\d{4})|(\d{4}\d{2}\d{2})|(\d{2}\d{2}\d{4})",
+                                   file_name)
+        if datetime_match:
+            date_str = datetime_match.group(0)
+
+            if re.match(r"\d{4}-\d{2}-\d{2}", date_str):
+                date_format = "%Y-%m-%d"
+            elif re.match(r"\d{2}-\d{2}-\d{4}", date_str):
+                date_format = "%d-%m-%Y"
+            elif re.match(r"\d{4}\d{2}\d{2}", date_str):
+                date_format = "%Y%m%d"
+            elif re.match(r"\d{2}\d{2}\d{4}", date_str):
+                date_format = "%d%m%Y"
+
+            if date_format:
+                pattern = re.sub(re.escape(date_str), "{datetime_pattern}", pattern)
+
+    return pattern, date_format
+

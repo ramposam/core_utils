@@ -2,7 +2,7 @@ import json
 import os
 from typing import List, Dict, Any
 from datetime import datetime
-
+import logging
 
 class ConfigReaderDBT():
 
@@ -54,6 +54,8 @@ class ConfigReaderDBT():
             mirror_ver_configs = self.read_json_file(mirror_configs_file_path)
             mirror_configs[details["version"]] = mirror_ver_configs
 
+        logging.info(f"mirror_configs:{mirror_configs}")
+        logging.info(f"mirror_versions:{mirror_versions}")
         return mirror_versions,mirror_configs
 
 
@@ -68,7 +70,8 @@ class ConfigReaderDBT():
             stage_configs_file_path = os.path.join(stage_configs_dir, f"""{self.dataset_name}_stage_{details["version"]}.json""")
             stage_ver_configs = self.read_json_file(stage_configs_file_path)
             stage_configs[details["version"]] = stage_ver_configs
-
+        logging.info(f"stage_versions:{stage_versions}")
+        logging.info(f"stage_configs:{stage_configs}")
         return stage_versions, stage_configs
 
     def get_configs(self):
@@ -95,4 +98,5 @@ class ConfigReaderDBT():
                                             "table_schema":stage_configs[stage_version]["table_schema"],
                                             "unique_keys":stage_configs[stage_version]["unique_keys"],
                                             "transformations":stage_configs[stage_version]["transformations"]}}}
+        logging.info(f"dataset_configs:{dataset_configs}")
         return dataset_configs

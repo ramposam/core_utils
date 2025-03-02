@@ -30,7 +30,7 @@ class DatasetVersion:
     dataset_name: str
     versions: List[Dict] = field(default_factory=lambda: [{
         "version": "v1",
-        "start_date": "2021-01-01",
+        "start_date": "2000-01-01",
         "end_date": "9999-12-31"}])
 
 
