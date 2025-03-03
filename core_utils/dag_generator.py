@@ -43,6 +43,15 @@ class DagGenerator:
                 dag_template += "from operators.postgres_load_to_stage_operator import PostgresLoadToStageOperator" + "\n"
             elif task == "postgres_file_mirror_data_check_task":
                 dag_template += "from operators.file_postgres_table_data_check_operator import FilePostgresTableDataCheckOperator" + "\n"
+            elif task == "snowflake_mirror_tests_task":
+                dag_template += "from operators.snowflake_mirror_tests_operator import SnowflakeMirrorTestsOperator" + "\n"
+            elif task == "snowflake_stage_tests_task":
+                dag_template += "from operators.snowflake_stage_tests_operator import SnowflakeStageTestsOperator" + "\n"
+
+            elif task == "postgres_mirror_tests_task":
+                dag_template += "from operators.postgres_mirror_tests_operator import PostgresMirrorTestsOperator" + "\n"
+            elif task == "postgres_stage_tests_task":
+                dag_template += "from operators.postgres_stage_tests_operator import PostgresStageTestsOperator" + "\n"
 
         datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper().replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
 
@@ -211,6 +220,30 @@ with DAG(
         )
             """
 
+        if "postgres_mirror_tests_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        postgres_mirror_tests_task = PostgresMirrorTestsOperator(
+            task_id="mirror_data_tests",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "snowflake_mirror_tests_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        snowflake_mirror_tests_task = SnowflakeMirrorTestsOperator(
+            task_id="mirror_data_tests",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
         if "snowflake_stage_task" in dataset_configs["tasks"]:
             dag_template += f"""
         snowflake_stage_task = SnowflakeLoadToStageOperator(
@@ -227,6 +260,30 @@ with DAG(
             dag_template += f"""
         postgres_stage_task = PostgresLoadToStageOperator(
             task_id="load_to_stage_table",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "snowflake_stage_tests_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        snowflake_stage_tests_task = SnowflakeStageTestsOperator(
+            task_id="stage_data_tests",
+            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            db_conn_id="{dataset_configs["db_conn_id"]}",
+            bucket_name="{dataset_configs["bucket"]}",
+            s3_configs_path="dataset_configs/dev/",
+            dataset_name="{dataset_configs["dataset_name"]}"
+        )
+            """
+
+        if "postgres_stage_tests_task" in dataset_configs["tasks"]:
+            dag_template += f"""
+        postgres_stage_tests_task = PostgresStageTestsOperator(
+            task_id="stage_data_tests",
             s3_conn_id="{dataset_configs["s3_connection_id"]}",
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name="{dataset_configs["bucket"]}",

@@ -91,18 +91,31 @@ FROM {dataset_name}
                                        "config": {"tags": [f"{dataset_name}-{layer}",
                                                            dataset_name]}}]}
 
-        unique_table_level_column_tests = " || '-' || ".join(unique_keys)
-        mirror_template["models"][0].update({"tests": [{"unique": {"column_name": unique_table_level_column_tests,
-                                                                   "name": f"""{dataset_name}_{table_name}_unique""".upper(),
-                                                                   "config": {"severity": "WARN",
-                                                                              "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
+        unique_table_level_column_tests = " || '-' || ".join([f'"{col}"' for col in unique_keys])
+        if layer == "mirror":
+            mirror_template["models"][0].update({"tests": [{"unique": {"column_name": unique_table_level_column_tests,
+                                                                       "name": f"""{dataset_name}_{table_name}_unique""".upper(),
+                                                                       "config": {"severity": "WARN",
+                                                                                  "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
+        elif layer == "stage":
+            mirror_template["models"][0].update({"tests": [{"unique": {"column_name": unique_table_level_column_tests,
+                                                                       "name": f"""{dataset_name}_{table_name}_unique""".upper(),
+                                                                       "config": {"severity": "WARN",
+                                                                                  "where": """  "EFFECTIVE_START_DATE" = '{{ var("run_date") }}'"""}}}]})
 
         columns_test = []
-        for column in unique_keys:
-            columns_test.append({"name": column,
-                                 "tests": [{"not_null": {"name": f"""{table_name}_{column}_not_null""".upper(),
-                                                         "config": {"severity": "WARN",
-                                                                    "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
+        if layer == "mirror":
+            for column in unique_keys:
+                columns_test.append({"name": f'"{column}"',
+                                     "tests": [{"not_null": {"name": f"""{table_name}_{column}_not_null""".upper(),
+                                                             "config": {"severity": "WARN",
+                                                                        "where": """  "FILE_DATE" = '{{ var("run_date") }}'"""}}}]})
+        elif layer == "stage":
+            for column in unique_keys:
+                columns_test.append({"name": f'"{column}"',
+                                     "tests": [{"not_null": {"name": f"""{table_name}_{column}_not_null""".upper(),
+                                                             "config": {"severity": "WARN",
+                                                                        "where": """  "EFFECTIVE_START_DATE" = '{{ var("run_date") }}'"""}}}]})
 
         mirror_template["models"][0].update({"columns": columns_test})
         return mirror_template

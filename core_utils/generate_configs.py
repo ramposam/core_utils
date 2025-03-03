@@ -174,7 +174,9 @@ class ConfigTemplate():
                                                  "copy_to_postgres_task",
                                                  "postgres_file_mirror_data_check_task",
                                                  "postgres_mirror_task",
-                                                 "postgres_stage_task"],
+                                                 "postgres_mirror_tests_task",
+                                                 "postgres_stage_task",
+                                                 "postgres_stage_tests_task"],
                                             mirror_layer ={"database": "COMMON_DB", "schema": "MIRROR"},
                                             stage_layer={"database": "COMMON_DB", "schema": "STAGE"},
                                             schedule_interval=self.schedule_interval)

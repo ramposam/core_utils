@@ -15,7 +15,9 @@ class DatasetConfigs:
                                  "copy_to_snowflake_task",
                                  "snowflake_file_mirror_data_check_task",
                                  "snowflake_mirror_task",
-                                 "snowflake_stage_task"])
+                                 "snowflake_mirror_tests_task",
+                                 "snowflake_stage_task",
+                                 "snowflake_stage_tests_task"])
     mirror_layer: Dict = field(default_factory=lambda: {"database": "MIRROR_DB", "schema": "MIRROR"})
     stage_layer: Dict = field(default_factory=lambda: {"database": "STAGE_DB", "schema": "STAGE"})
     s3_connection_id: str = field(default="S3_CONN_ID")
