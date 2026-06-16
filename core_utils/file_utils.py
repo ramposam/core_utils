@@ -26,7 +26,7 @@ PANDAS_TO_POSTGRES_TYPES = {
 
 def identify_delimiter(file_path):
     # Open the file and read the first 3 lines
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', errors='ignore') as file:
         lines = [file.readline() for _ in range(3)]
 
     # Join the first 3 lines to form a sample text
@@ -44,7 +44,7 @@ def identify_delimiter(file_path):
 
 def infer_and_convert_data_types(csv_file_path, lines_to_read=5000):
     # Read only the first `lines_to_read` rows of the CSV file
-    df = pd.read_csv(csv_file_path, nrows=lines_to_read)
+    df = pd.read_csv(csv_file_path, on_bad_lines='skip', nrows=lines_to_read)
 
     # Identify the header
     header = [col.replace(" ", "_").upper() for col in list(df.columns)]
@@ -75,7 +75,7 @@ def read_and_infer(file_path):
 
 def get_unique_keys(file_path,delimiter,header_line,num_rows=5000):
 
-    df = pd.read_csv(file_path, sep=delimiter,header=header_line-1, nrows=num_rows)
+    df = pd.read_csv(file_path, engine="python", on_bad_lines="skip", sep=delimiter, header=header_line-1, nrows=num_rows)
 
     unique_columns = []
     for (col, dtype) in df.dtypes.items():
