@@ -1,6 +1,6 @@
 snowflake_stage_template = """
  CREATE STAGE IF NOT EXISTS MIRROR_DB.MIRROR.STG_{dataset_name}_S3
-  URL='s3://{s3_bucket}/{s3_dataset_path}/'
+  URL='s3://{bucket}/{dataset_path}/'
   CREDENTIALS=(AWS_KEY_ID='{aws_access_key}' AWS_SECRET_KEY='{aws_secret_key}')
   ENCRYPTION=(TYPE='AWS_SSE_KMS' KMS_KEY_ID = 'aws/key');
   """

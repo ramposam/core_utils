@@ -7,10 +7,10 @@ import logging
 
 class SnowflakePipeline():
     def __init__(self, **kwargs):
-        self.s3_bucket = kwargs.get("bucket")
+        self.bucket = kwargs.get("bucket")
         self.aws_access_key = kwargs.get("aws_access_key")
         self.aws_secret_key = kwargs.get("aws_secret_key")
-        self.s3_dataset_path = kwargs.get("s3_dataset_path")
+        self.dataset_path = kwargs.get("dataset_path")
         self.dataset_name = kwargs.get("dataset_name")
         self.file_extension = kwargs.get("file_extension")
         self.delimiter = kwargs.get("delimiter")
@@ -22,8 +22,8 @@ class SnowflakePipeline():
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
 
     def get_stage_sql(self):
-        stage_sql = snowflake_stage_template.format(s3_bucket=self.s3_bucket,
-                                                    s3_dataset_path=self.s3_dataset_path,
+        stage_sql = snowflake_stage_template.format(bucket=self.bucket,
+                                                    dataset_path=self.dataset_path,
                                                     dataset_name=self.dataset_name.upper(),
                                                     aws_access_key=self.aws_access_key,
                                                     aws_secret_key=self.aws_secret_key)

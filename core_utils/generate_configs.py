@@ -14,7 +14,7 @@ class ConfigTemplate():
         self.dataset_name = kwargs.get("dataset_name")
         self.bucket = bucket
         self.db_type = kwargs.get("db_type","SNOWFLAKE")
-        self.s3_dataset_path = kwargs.get("s3_dataset_path")
+        self.dataset_path = kwargs.get("dataset_path")
         self.start_date = kwargs.get("start_date")
         self.datetime_format = kwargs.get("datetime_format")
         self.catchup = kwargs.get("catchup")
@@ -138,7 +138,7 @@ class ConfigTemplate():
                 print(result) */
                 """
             file_extension = os.path.basename(self.file_path).split(".")[-1]
-            pipeline = SnowflakePipeline(bucket=self.bucket, s3_dataset_path=self.s3_dataset_path,
+            pipeline = SnowflakePipeline(bucket=self.bucket, dataset_path=self.dataset_path,
                                          dataset_name=self.dataset_name, file_extension=file_extension,
                                          delimiter=delimiter, mirror_schema=mirror_schema, file_schema=file_schema,
                                          aws_access_key=self.aws_access_key, aws_secret_key=self.aws_secret_key,
@@ -220,7 +220,7 @@ class ConfigTemplate():
                                                  file_format_params=file_format,
                                                  file_schema=file_schema,
                                                  file_name_pattern=file_name_pattern,
-                                                 file_path=self.s3_dataset_path,
+                                                 file_path=self.dataset_path,
                                                  datetime_pattern=datetime_pattern,
                                                  encoding=self.encoding)
 

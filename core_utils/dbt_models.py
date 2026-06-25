@@ -6,12 +6,14 @@ from ruamel.yaml import YAML
 
 
 class DBTMirrorModel():
-    def __init__(self, configs, layer,db_type):
+    def __init__(self, configs, layer, db_type, materialization, scd_config):
         self.configs = configs
         self.layer = layer
         self.db_type = db_type
+        self.materialization = materialization
+        self.scd_config = scd_config
 
-    def generate_mirror_model(self, table_name, model_path, materialization, dataset_name, unique_key, schema,
+    def generate_mirror_model(self, table_name, model_path, dataset_name, unique_key, schema,
                               database):
         """
         Generates a dbt model SQL file with the given configuration and source data.
@@ -26,13 +28,31 @@ class DBTMirrorModel():
         try:
 
             # Generate the dbt model SQL content
+            config_dict = {
+                "materialized": self.materialization,
+                "unique_key": [f'"{col}"' for col in unique_key],
+                "schema": schema,
+                "database": database
+            }
+
+            if self.materialization == "incremental":
+                config_dict["incremental_strategy"] = "merge"
+
+            if self.scd_config:
+                config_dict["scd_config"] = self.scd_config
+
+            config_str = ", ".join(
+                [
+                    f'{k}="{v}"' if isinstance(v, str)
+                    else f"{k}={[f'{item}' for item in v]}" if isinstance(v, list)
+                    else f"{k}={v}"
+                    for k, v in config_dict.items()
+                ]
+            )
+
             sql_content = f"""
     {{{{ config(
-        materialized="{materialization}",
-        unique_key={[f'"{col}"' for col in unique_key]},
-        incremental_strategy="merge",  
-        schema="{schema}",
-        database="{database}"
+        {config_str}
     ) }}}}
 
 {{%- set row_hash_excluded_columns = ['CREATED_BY', 'CREATED_DTS','FILE_DATE', 'FILENAME', 'FILE_ROW_NUMBER', 'FILE_LAST_MODIFIED','UPDATED_DTS','UPDATED_BY','UNIQUE_HASH_ID','ROW_HASH_ID'] -%}}
@@ -160,24 +180,42 @@ FROM {dataset_name}
         stage_tests_data = self.get_tests_yml(dataset_name, f"{stage_table}", unique_keys, "stage")
         self.convert_json_to_yaml_preserve_order(stage_tests_data, stage_table_tests_yml_path)
 
-    def getnerate_stage_model(self, table_name, mirror_table, model_path, materialization, dataset_name, unique_key,
+    def getnerate_stage_model(self, table_name, mirror_table, model_path, dataset_name, unique_key,
                               schema,
-                              database, transformations, mirror_db, mirror_schema,db_type):
+                              database, transformations, mirror_db, mirror_schema, db_type):
 
         # Generate the dbt model SQL content
+        config_dict = {
+            "materialized": self.materialization,
+            "unique_key": [f'"{col}"' for col in unique_key],
+            "schema": schema,
+            "database": database
+        }
+
+        if self.materialization == "incremental":
+            config_dict["incremental_strategy"] = "merge"
+
+        if self.scd_config:
+            config_dict["scd_config"] = self.scd_config
+
+        config_str = ", ".join(
+            [
+                f'{k}="{v}"' if isinstance(v, str)
+                else f"{k}={[f'{item}' for item in v]}" if isinstance(v, list)
+                else f"{k}={v}"
+                for k, v in config_dict.items()
+            ]
+        )
+
         sql_content = f"""
             {{{{ config(
-                materialized="{materialization}",
-                unique_key={[f'"{col}"' for col in unique_key]},
-                incremental_strategy="merge",  
-                schema="{schema}",
-                database="{database}"
+                {config_str}
             ) }}}}
 
         {{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS','UPDATED_DTS', 'UPDATED_BY', 'UNIQUE_HASH_ID','ROW_HASH_ID',"ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}}
-        
+
         {{%- set src_excluded_columns =  ["CREATED_BY","CREATED_DTS","UPDATED_DTS", "UPDATED_BY","FILENAME","FILE_NAME","FILE_DATE","FILE_ROW_NUMBER","FILE_LAST_MODIFIED","UNIQUE_HASH_ID","ROW_HASH_ID","ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}} 
-        
+
         """
 
         cte_queries = []
@@ -253,7 +291,7 @@ FROM {dataset_name}
                 current_timestamp as "UPDATED_DTS",
                 current_user as "UPDATED_BY"
            FROM cte_{cte_index}     
-    
+
         """
         else:
             # Final query
@@ -302,7 +340,6 @@ FROM {dataset_name}
             mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
 
             self.generate_mirror_model(table_name=mirror_table,
-                                       materialization="incremental",
                                        model_path=mirror_model_table_path,
                                        dataset_name=dataset_name,
                                        database=mirror_configs["database"],
@@ -332,7 +369,6 @@ FROM {dataset_name}
 
             self.getnerate_stage_model(table_name=stage_table,
                                        mirror_table=mirror_table,
-                                       materialization="incremental",
                                        model_path=stage_model_table_path,
                                        dataset_name=dataset_name,
                                        database=stage_configs["database"],

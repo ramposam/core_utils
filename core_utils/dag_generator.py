@@ -16,6 +16,12 @@ class DagGenerator:
     def generate_dag(self, dataset_configs, dag_template):
         mirror_db, mirror_schema = dataset_configs["mirror_layer"]["database"], dataset_configs["mirror_layer"][
             "schema"]
+
+        # Handle optional s3_connection_id and bucket
+        if dataset_configs.get("bucket") is None:
+            dataset_configs["bucket"] = None
+            dataset_configs["s3_connection_id"] = None
+
         for task in dataset_configs["tasks"]:
             if task == "acq_task":
                 dag_template += "from operators.acquisition_operator import AcquisitionOperator" + "\n"
@@ -53,7 +59,9 @@ class DagGenerator:
             elif task == "postgres_stage_tests_task":
                 dag_template += "from operators.postgres_stage_tests_operator import PostgresStageTestsOperator" + "\n"
 
-        datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper().replace("YYYY", "%Y").replace("MM", "%m").replace( "DD", "%d")
+        datetime_format = dataset_configs["mirror"]["v1"].get("datetime_pattern", "").upper().replace("YYYY",
+                                                                                                      "%Y").replace(
+            "MM", "%m").replace("DD", "%d")
 
         dag_template += default_args
 
@@ -63,7 +71,7 @@ with DAG(
     dag_id="{dataset_configs["dataset_name"]}_dag",
     default_args=default_args,
     description="A simple DAG with a Data ingestion",
-    schedule_interval="{dataset_configs["schedule_interval"]}",  # No schedule, triggered manually
+    schedule="{dataset_configs["schedule_interval"]}",  # No schedule, triggered manually
     start_date=datetime({dataset_configs["start_date"]}),
     max_active_runs=1 ,
     catchup={dataset_configs["load_historical_data"]},
@@ -86,10 +94,10 @@ with DAG(
             dag_template += f"""
          # Task 1: Using the AcquisitionOperator
         acq_task = AcquisitionOperator(
-            task_id="check_file_present_on_s3",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            dataset_dir="{dataset_configs["mirror"]["v1"]["file_path"]}",
+            task_id={f'"check_file_present"' if dataset_configs["bucket"] is None else f'"check_file_present_on_s3"'},
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            dataset_dir=r"{dataset_configs["mirror"]["v1"]["file_path"]}",
             file_pattern="{dataset_configs["mirror"]["v1"]["file_name_pattern"]}",
             datetime_pattern="{datetime_format}"
         ) 
@@ -97,10 +105,10 @@ with DAG(
         if "download_task" in dataset_configs["tasks"]:
             dag_template += f"""
         download_task = DownloadOperator(
-            task_id="download_file_from_s3_to_airflow_tmp_area",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            dataset_dir="{dataset_configs["mirror"]["v1"]["file_path"]}",
+            task_id={f'"download_file_to_airflow_tmp_area"' if dataset_configs["bucket"] is None else f'"download_file_from_s3_to_airflow_tmp_area"'},
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            dataset_dir=r"{dataset_configs["mirror"]["v1"]["file_path"]}",
             file_name="{dataset_configs["mirror"]["v1"]["file_name_pattern"]}",
             datetime_pattern="{datetime_format}"
         )
@@ -118,9 +126,9 @@ with DAG(
         snowflake_schema_check_task = FileSnowflakeTableSchemaCheckOperator(
             task_id="check_schema_of_config_n_received_file",
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
@@ -133,9 +141,9 @@ with DAG(
         postgres_schema_check_task = FilePostgresTableSchemaCheckOperator(
             task_id="check_schema_of_config_n_received_file",
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}"
         )
@@ -146,9 +154,9 @@ with DAG(
         copy_to_snowflake_task = SnowflakeCopyOperator(
             task_id="copy_data_from_internal_stage",
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
@@ -164,7 +172,7 @@ with DAG(
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",            
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR",
             file_format_params={dataset_configs["mirror"]["v1"]["file_format_params"]},
-            datetime_pattern="{dataset_configs["mirror"]["v1"].get("datetime_pattern","").upper()}"
+            datetime_pattern="{dataset_configs["mirror"]["v1"].get("datetime_pattern", "").upper()}"
         )
             """
 
@@ -173,9 +181,9 @@ with DAG(
         snowflake_file_mirror_data_check_task = FileSnowflakeTableDataCheckOperator(
             task_id="check_file_n_mirror_table_data",
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
@@ -187,9 +195,9 @@ with DAG(
         postgres_file_mirror_data_check_task = FilePostgresTableDataCheckOperator(
             task_id="check_file_n_mirror_table_data",
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
@@ -200,10 +208,10 @@ with DAG(
             dag_template += f"""
         snowflake_mirror_task = SnowflakeLoadToMirrorOperator(
             task_id="load_to_mirror_table",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -212,10 +220,10 @@ with DAG(
             dag_template += f"""
         postgres_mirror_task = PostgresLoadToMirrorOperator(
             task_id="load_to_mirror_table",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -224,10 +232,10 @@ with DAG(
             dag_template += f"""
         postgres_mirror_tests_task = PostgresMirrorTestsOperator(
             task_id="mirror_data_tests",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -236,10 +244,10 @@ with DAG(
             dag_template += f"""
         snowflake_mirror_tests_task = SnowflakeMirrorTestsOperator(
             task_id="mirror_data_tests",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -248,10 +256,10 @@ with DAG(
             dag_template += f"""
         snowflake_stage_task = SnowflakeLoadToStageOperator(
             task_id="load_to_stage_table",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -260,10 +268,10 @@ with DAG(
             dag_template += f"""
         postgres_stage_task = PostgresLoadToStageOperator(
             task_id="load_to_stage_table",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -272,10 +280,10 @@ with DAG(
             dag_template += f"""
         snowflake_stage_tests_task = SnowflakeStageTestsOperator(
             task_id="stage_data_tests",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -284,10 +292,10 @@ with DAG(
             dag_template += f"""
         postgres_stage_tests_task = PostgresStageTestsOperator(
             task_id="stage_data_tests",
-            s3_conn_id="{dataset_configs["s3_connection_id"]}",
+            s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
-            bucket_name="{dataset_configs["bucket"]}",
-            s3_configs_path="dataset_configs/dev/",
+            bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
+            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -300,7 +308,7 @@ with DAG(
         dag_template += dag_tasks
         return dag_template
 
-    def generate_ddls(self, database, schema, table_name, table_schema,layer):
+    def generate_ddls(self, database, schema, table_name, table_schema, layer):
 
         """
         Generate Snowflake table DDL from table name and schema.
@@ -320,7 +328,7 @@ with DAG(
             else:
                 column_definitions.append(f"    {column_name} {data_type}")
 
-        if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
+        if layer.upper() == "MIRROR" and not table_name.endswith("_TR"):
             column_definitions.append(f'    "UPDATED_DTS" TIMESTAMP')
             column_definitions.append(f'    "UPDATED_BY" TEXT')
             column_definitions.append(f'    "UNIQUE_HASH_ID" TEXT')
@@ -351,11 +359,11 @@ with DAG(
         table_name, table_schema = dataset_configs["mirror"]["v1"]["table_name"], dataset_configs["mirror"]["v1"][
             "table_schema"]
 
-        mirror_tr_ddls = self.generate_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema,"mirror")
+        mirror_tr_ddls = self.generate_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema, "mirror")
 
         write_to_file(mirror_tr_ddls, os.path.join(dag_gen_dir, f"{table_name}_TR.sql"))
 
-        mirror_ddls = self.generate_ddls(mirror_db, mirror_schema, table_name, table_schema,"mirror")
+        mirror_ddls = self.generate_ddls(mirror_db, mirror_schema, table_name, table_schema, "mirror")
 
         write_to_file(mirror_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
@@ -363,7 +371,7 @@ with DAG(
         table_name, table_schema = dataset_configs["stage"]["v1"]["table_name"], dataset_configs["stage"]["v1"][
             "table_schema"]
 
-        stage_ddls = self.generate_ddls(stage_db, stage_schema, table_name, table_schema,"stage")
+        stage_ddls = self.generate_ddls(stage_db, stage_schema, table_name, table_schema, "stage")
 
         write_to_file(stage_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
