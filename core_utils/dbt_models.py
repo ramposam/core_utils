@@ -6,14 +6,14 @@ from ruamel.yaml import YAML
 
 
 class DBTMirrorModel():
-    def __init__(self, configs, layer, db_type, materialization, scd_config):
+    def __init__(self, configs, layer, db_type, materialization="incremental", scd_config=None):
         self.configs = configs
         self.layer = layer
         self.db_type = db_type
         self.materialization = materialization
-        self.scd_config = scd_config
+        self.scd_config = scd_config or {}
 
-    def generate_mirror_model(self, table_name, model_path, dataset_name, unique_key, schema,
+    def generate_mirror_model(self, table_name, model_path, materialization, dataset_name, unique_key, schema,
                               database):
         """
         Generates a dbt model SQL file with the given configuration and source data.
@@ -29,22 +29,32 @@ class DBTMirrorModel():
 
             # Generate the dbt model SQL content
             config_dict = {
-                "materialized": self.materialization,
+                "materialized": materialization,
                 "unique_key": [f'"{col}"' for col in unique_key],
                 "schema": schema,
                 "database": database
             }
 
-            if self.materialization == "incremental":
+            if materialization == "incremental":
                 config_dict["incremental_strategy"] = "merge"
 
-            if self.scd_config:
-                config_dict["scd_config"] = self.scd_config
+            if self.scd_config and self.layer == "stage":
+                # Handle nested scd_config properly for stage layer only
+                scd_columns = self.scd_config.get('scd_columns', {})
+                if scd_columns:
+                    config_dict["scd_columns"] = scd_columns
+                excluded_cols = self.scd_config.get('excluded_columns', [])
+                if excluded_cols:
+                    config_dict["excluded_columns"] = excluded_cols
+                unique_key_override = self.scd_config.get('unique_key')
+                if unique_key_override:
+                    config_dict["unique_key"] = unique_key_override
 
             config_str = ", ".join(
                 [
                     f'{k}="{v}"' if isinstance(v, str)
                     else f"{k}={[f'{item}' for item in v]}" if isinstance(v, list)
+                    else f"{k}={json.dumps(v)}" if isinstance(v, dict)
                     else f"{k}={v}"
                     for k, v in config_dict.items()
                 ]
@@ -80,7 +90,8 @@ FROM {dataset_name}
 
             logging.info(f"Successfully generated dbt model SQL at {model_path}")
         except Exception as e:
-            logging.info(f"Error: {e}")
+            logging.error(f"Error generating dbt model: {e}")
+            raise
 
     def convert_json_to_yaml_preserve_order(self, json_data, yaml_file_path):
         """
@@ -101,7 +112,8 @@ FROM {dataset_name}
 
             logging.info(f"Successfully converted json data to {yaml_file_path} with preserved order.")
         except Exception as e:
-            logging.info(f"Error: {e}")
+            logging.error(f"Error converting JSON to YAML: {e}")
+            raise
 
     def get_tests_yml(self, dataset_name, table_name, unique_keys, layer):
 
@@ -180,143 +192,179 @@ FROM {dataset_name}
         stage_tests_data = self.get_tests_yml(dataset_name, f"{stage_table}", unique_keys, "stage")
         self.convert_json_to_yaml_preserve_order(stage_tests_data, stage_table_tests_yml_path)
 
-    def getnerate_stage_model(self, table_name, mirror_table, model_path, dataset_name, unique_key,
+    def generate_stage_model(self, table_name, mirror_table, model_path, materialization, dataset_name, unique_key,
                               schema,
                               database, transformations, mirror_db, mirror_schema, db_type):
+        try:
+            # Generate the dbt model SQL content
+            config_dict = {
+                "materialized": materialization,
+                "unique_key": [f'"{col}"' for col in unique_key],
+                "schema": schema,
+                "database": database
+            }
 
-        # Generate the dbt model SQL content
-        config_dict = {
-            "materialized": self.materialization,
-            "unique_key": [f'"{col}"' for col in unique_key],
-            "schema": schema,
-            "database": database
-        }
+            if materialization == "incremental":
+                config_dict["incremental_strategy"] = "merge"
 
-        if self.materialization == "incremental":
-            config_dict["incremental_strategy"] = "merge"
+            if self.scd_config:
+                # Handle nested scd_config properly for stage layer
+                scd_columns = self.scd_config.get('scd_columns', {})
+                if scd_columns:
+                    config_dict["scd_columns"] = scd_columns
+                excluded_cols = self.scd_config.get('excluded_columns', [])
+                if excluded_cols:
+                    config_dict["excluded_columns"] = excluded_cols
+                unique_key_override = self.scd_config.get('unique_key')
+                if unique_key_override:
+                    config_dict["unique_key"] = unique_key_override
 
-        if self.scd_config:
-            config_dict["scd_config"] = self.scd_config
+            config_str = ", ".join(
+                [
+                    f'{k}="{v}"' if isinstance(v, str)
+                    else f"{k}={[f'{item}' for item in v]}" if isinstance(v, list)
+                    else f"{k}={json.dumps(v)}" if isinstance(v, dict)
+                    else f"{k}={v}"
+                    for k, v in config_dict.items()
+                ]
+            )
 
-        config_str = ", ".join(
-            [
-                f'{k}="{v}"' if isinstance(v, str)
-                else f"{k}={[f'{item}' for item in v]}" if isinstance(v, list)
-                else f"{k}={v}"
-                for k, v in config_dict.items()
-            ]
-        )
+            sql_content = f"""
+                {{{{ config(
+                    {config_str}
+                ) }}}}
 
-        sql_content = f"""
-            {{{{ config(
-                {config_str}
-            ) }}}}
+            {{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS','UPDATED_DTS', 'UPDATED_BY', 'UNIQUE_HASH_ID','ROW_HASH_ID',"ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}}
 
-        {{%- set excluded_columns = ['CREATED_BY', 'CREATED_DTS','UPDATED_DTS', 'UPDATED_BY', 'UNIQUE_HASH_ID','ROW_HASH_ID',"ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}}
+            {{%- set src_excluded_columns =  ["CREATED_BY","CREATED_DTS","UPDATED_DTS", "UPDATED_BY","FILENAME","FILE_NAME","FILE_DATE","FILE_ROW_NUMBER","FILE_LAST_MODIFIED","UNIQUE_HASH_ID","ROW_HASH_ID","ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}} 
 
-        {{%- set src_excluded_columns =  ["CREATED_BY","CREATED_DTS","UPDATED_DTS", "UPDATED_BY","FILENAME","FILE_NAME","FILE_DATE","FILE_ROW_NUMBER","FILE_LAST_MODIFIED","UNIQUE_HASH_ID","ROW_HASH_ID","ACTIVE_FL","EFFECTIVE_START_DATE","EFFECTIVE_END_DATE"] -%}} 
+            """
 
-        """
+            cte_queries = []
+            cte_index = 0
 
-        cte_queries = []
-        cte_index = 0
+            if db_type == "POSTGRES":
+                # Base CTE
+                cte_queries.append(f""" cte_{cte_index} 
+                AS ( 
+                SELECT 
+                 {{{{  generate_columns_with_types("{schema}","{table_name}",src_excluded_columns)  }}}}
+                FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
+                where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
+                )""")
+            else:
+                # Base CTE
+                cte_queries.append(f""" cte_{cte_index} 
+                        AS ( 
+                        SELECT 
+                        * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID)
+                        FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
+                        where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
+                        )""")
 
-        if db_type == "POSTGRES":
-            # Base CTE
-            cte_queries.append(f""" cte_{cte_index} 
-            AS ( 
-            SELECT 
-             {{{{  generate_columns_with_types("{schema}","{table_name}",src_excluded_columns)  }}}}
-            FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
-            where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
-            )""")
-        else:
-            # Base CTE
-            cte_queries.append(f""" cte_{cte_index} 
-                    AS ( 
-                    SELECT 
-                    * exclude (CREATED_BY, CREATED_DTS,UPDATED_DTS, UPDATED_BY,FILENAME,FILE_DATE, FILE_ROW_NUMBER, FILE_LAST_MODIFIED, UNIQUE_HASH_ID, ROW_HASH_ID)
-                    FROM  {{{{ source('stage_{dataset_name}', '{mirror_table}') }}}} 
-                    where   "FILE_DATE" = '{{{{ var("run_date")  }}}}'
-                    )""")
+            for transformation in transformations:
+                cte_index += 1
+                prev_cte = f"cte_{cte_index - 1}"
 
-        for transformation in transformations:
-            cte_index += 1
-            prev_cte = f"cte_{cte_index - 1}"
+                if 'type' not in transformation:
+                    logging.error(f"Transformation missing 'type' key: {transformation}")
+                    raise ValueError(f"Transformation missing 'type' key: {transformation}")
 
-            if transformation['type'] == 'select':
-                columns = ', '.join(transformation['columns'])
-                query = f"SELECT {columns} FROM {prev_cte}"
+                if transformation['type'] == 'select':
+                    if 'columns' not in transformation:
+                        logging.error(f"Select transformation missing 'columns' key: {transformation}")
+                        raise ValueError(f"Select transformation missing 'columns' key: {transformation}")
+                    columns = ', '.join(transformation['columns'])
+                    query = f"SELECT {columns} FROM {prev_cte}"
 
-            elif transformation['type'] == 'filter':
-                condition = transformation['condition']
-                query = f"SELECT * FROM {prev_cte} WHERE {condition}"
+                elif transformation['type'] == 'filter':
+                    if 'condition' not in transformation:
+                        logging.error(f"Filter transformation missing 'condition' key: {transformation}")
+                        raise ValueError(f"Filter transformation missing 'condition' key: {transformation}")
+                    condition = transformation['condition']
+                    query = f"SELECT * FROM {prev_cte} WHERE {condition}"
 
-            elif transformation['type'] == 'join':
-                join_table = transformation['table']
-                join_condition = transformation['on']
-                query = f"SELECT * FROM {prev_cte} JOIN {join_table} ON {join_condition}"
+                elif transformation['type'] == 'join':
+                    if 'table' not in transformation or 'on' not in transformation:
+                        logging.error(f"Join transformation missing required keys: {transformation}")
+                        raise ValueError(f"Join transformation missing required keys: {transformation}")
+                    join_table = transformation['table']
+                    join_condition = transformation['on']
+                    query = f"SELECT * FROM {prev_cte} JOIN {join_table} ON {join_condition}"
 
-            elif transformation['type'] == 'pivot':
-                column = transformation['column']
-                values = ', '.join([f"'{v}'" for v in transformation['values']])
-                query = (
-                    f"SELECT * FROM crosstab(\n"
-                    f"    'SELECT {column}, value FROM {prev_cte}',\n"
-                    f"    ARRAY[{values}]\n"
-                    f") AS ct({column} TEXT, value TEXT)"
-                )
+                elif transformation['type'] == 'pivot':
+                    if 'column' not in transformation or 'values' not in transformation:
+                        logging.error(f"Pivot transformation missing required keys: {transformation}")
+                        raise ValueError(f"Pivot transformation missing required keys: {transformation}")
+                    column = transformation['column']
+                    values = ', '.join([f"'{v}'" for v in transformation['values']])
+                    query = (
+                        f"SELECT * FROM crosstab(\n"
+                        f"    'SELECT {column}, value FROM {prev_cte}',\n"
+                        f"    ARRAY[{values}]\n"
+                        f") AS ct({column} TEXT, value TEXT)"
+                    )
 
-            elif transformation['type'] == 'unpivot':
-                columns = ', '.join(transformation['columns'])
-                alias = ', '.join(transformation['alias'])
-                query = (
-                    f"SELECT {alias} FROM {prev_cte} \n"
-                    f"UNPIVOT ({alias} FOR column IN ({columns}))"
-                )
+                elif transformation['type'] == 'unpivot':
+                    if 'columns' not in transformation or 'alias' not in transformation:
+                        logging.error(f"Unpivot transformation missing required keys: {transformation}")
+                        raise ValueError(f"Unpivot transformation missing required keys: {transformation}")
+                    columns = ', '.join(transformation['columns'])
+                    alias = ', '.join(transformation['alias'])
+                    query = (
+                        f"SELECT {alias} FROM {prev_cte} \n"
+                        f"UNPIVOT ({alias} FOR column IN ({columns}))"
+                    )
 
-            cte_queries.append(f"cte_{cte_index} AS (\n    {query}\n)")
+                else:
+                    logging.error(f"Unknown transformation type: {transformation['type']}")
+                    raise ValueError(f"Unknown transformation type: {transformation['type']}")
 
-        if db_type == "POSTGRES":
-            # Final query
-            with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
-            SELECT *, 
-                'Y' as "ACTIVE_FL",
-                '{{{{ var("run_date") }}}}'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_START_DATE" ,
-                '9999-12-31'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_END_DATE",
-                md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
-                md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
-                current_timestamp as "CREATED_DTS",
-                current_user as "CREATED_BY",
-                current_timestamp as "UPDATED_DTS",
-                current_user as "UPDATED_BY"
-           FROM cte_{cte_index}     
+                cte_queries.append(f"cte_{cte_index} AS (\n    {query}\n)")
 
-        """
-        else:
-            # Final query
-            with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
-                    SELECT *, 
-                        'Y' as "ACTIVE_FL",
-                        '{{{{ var("run_date") }}}}' as "EFFECTIVE_START_DATE" ,
-                        '9999-12-31' as "EFFECTIVE_END_DATE",
-                        md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
-                        md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
-                        current_timestamp as "CREATED_DTS",
-                        current_user as "CREATED_BY",
-                        current_timestamp as "UPDATED_DTS",
-                        current_user as "UPDATED_BY"
-                   FROM cte_{cte_index}     
+            if db_type == "POSTGRES":
+                # Final query
+                with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
+                SELECT *, 
+                    'Y' as "ACTIVE_FL",
+                    '{{{{ var("run_date") }}}}'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_START_DATE" ,
+                    '9999-12-31'::TIMESTAMP WITHOUT TIME ZONE as "EFFECTIVE_END_DATE",
+                    md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
+                    md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
+                    current_timestamp as "CREATED_DTS",
+                    current_user as "CREATED_BY",
+                    current_timestamp as "UPDATED_DTS",
+                    current_user as "UPDATED_BY"
+               FROM cte_{cte_index}     
 
-                """
+            """
+            else:
+                # Final query
+                with_query = f"WITH\n" + ",\n".join(cte_queries) + f"""
+                        SELECT *, 
+                            'Y' as "ACTIVE_FL",
+                            '{{{{ var("run_date") }}}}' as "EFFECTIVE_START_DATE" ,
+                            '9999-12-31' as "EFFECTIVE_END_DATE",
+                            md5({{{{  generate_unique_hash_id({unique_key})  }}}}) as "UNIQUE_HASH_ID",
+                            md5({{{{  generate_row_hash_id(this,excluded_columns)  }}}}) as "ROW_HASH_ID",
+                            current_timestamp as "CREATED_DTS",
+                            current_user as "CREATED_BY",
+                            current_timestamp as "UPDATED_DTS",
+                            current_user as "UPDATED_BY"
+                       FROM cte_{cte_index}     
 
-        sql_content = sql_content + "\n" + with_query
+                    """
 
-        # Write the SQL content to the output file
-        with open(model_path, 'w', encoding='utf-8') as sql_file:
-            sql_file.write(sql_content.strip())
+            sql_content = sql_content + "\n" + with_query
 
-        logging.info(f"Successfully generated dbt model SQL at {model_path}")
+            # Write the SQL content to the output file
+            with open(model_path, 'w', encoding='utf-8') as sql_file:
+                sql_file.write(sql_content.strip())
+
+            logging.info(f"Successfully generated dbt model SQL at {model_path}")
+        except Exception as e:
+            logging.error(f"Error generating stage model: {e}")
+            raise
 
     def generate(self):
 
@@ -324,9 +372,41 @@ FROM {dataset_name}
         models_path = os.path.join(current_dir, "dbt", "models")
 
         Path(models_path).mkdir(exist_ok=True, parents=True)
+        
+        if not self.configs:
+            logging.error("Configs dictionary is empty")
+            raise ValueError("Configs dictionary is empty")
+        
         dataset_name = list(self.configs.keys())[0]
 
+        # Validate required config keys
+        if dataset_name not in self.configs:
+            logging.error(f"Dataset name '{dataset_name}' not found in configs")
+            raise ValueError(f"Dataset name '{dataset_name}' not found in configs")
+        
+        if "mirror" not in self.configs[dataset_name]:
+            logging.error(f"Mirror config not found for dataset '{dataset_name}'")
+            raise ValueError(f"Mirror config not found for dataset '{dataset_name}'")
+        
         mirror_configs = self.configs[dataset_name]["mirror"]
+        
+        required_mirror_keys = ["table_name", "unique_keys", "database", "schema"]
+        for key in required_mirror_keys:
+            if key not in mirror_configs:
+                logging.error(f"Required key '{key}' not found in mirror config")
+                raise ValueError(f"Required key '{key}' not found in mirror config")
+        
+        if self.layer == "stage":
+            if "stage" not in self.configs[dataset_name]:
+                logging.error(f"Stage config not found for dataset '{dataset_name}'")
+                raise ValueError(f"Stage config not found for dataset '{dataset_name}'")
+            
+            stage_configs = self.configs[dataset_name]["stage"]
+            required_stage_keys = ["table_name", "database", "schema"]
+            for key in required_stage_keys:
+                if key not in stage_configs:
+                    logging.error(f"Required key '{key}' not found in stage config")
+                    raise ValueError(f"Required key '{key}' not found in stage config")
 
         if self.layer == "mirror":
             mirror_dir = os.path.join(models_path, "mirror", dataset_name)
@@ -340,6 +420,7 @@ FROM {dataset_name}
             mirror_model_table_path = os.path.join(mirror_dir, f"{mirror_table}.sql")
 
             self.generate_mirror_model(table_name=mirror_table,
+                                       materialization=self.materialization,
                                        model_path=mirror_model_table_path,
                                        dataset_name=dataset_name,
                                        database=mirror_configs["database"],
@@ -367,8 +448,9 @@ FROM {dataset_name}
 
             stage_model_table_path = os.path.join(stage_dir, f"{stage_table}.sql")
 
-            self.getnerate_stage_model(table_name=stage_table,
+            self.generate_stage_model(table_name=stage_table,
                                        mirror_table=mirror_table,
+                                       materialization=self.materialization,
                                        model_path=stage_model_table_path,
                                        dataset_name=dataset_name,
                                        database=stage_configs["database"],
