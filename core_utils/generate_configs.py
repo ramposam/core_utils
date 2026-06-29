@@ -1,10 +1,19 @@
 import os
+import logging
+from datetime import datetime
 
 from core_utils.file_utils import read_and_infer, write_to_json_file, write_to_file, get_unique_keys, \
     get_file_name_pattern
 from core_utils.generate_snowflake_pipeline import SnowflakePipeline
 from core_utils.meta_classes import DatasetConfigs, DatasetVersion, DatasetMirror, DatasetStage
 from pathlib import Path
+
+# Configure logging with datetime
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 
 class ConfigTemplate():
@@ -13,7 +22,7 @@ class ConfigTemplate():
         self.pipeline_type = kwargs.get("pipeline_type")
         self.dataset_name = kwargs.get("dataset_name")
         self.bucket = bucket
-        self.db_type = kwargs.get("db_type","SNOWFLAKE")
+        self.db_type = kwargs.get("db_type", "SNOWFLAKE")
         self.dataset_path = kwargs.get("dataset_path")
         self.start_date = kwargs.get("start_date")
         self.datetime_format = kwargs.get("datetime_format")
@@ -23,9 +32,19 @@ class ConfigTemplate():
         self.aws_secret_key = kwargs.get("aws_secret_key")
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
         self.encoding = kwargs.get("encoding")
+        self.layer = kwargs.get("layer", "Mirror -> Stage -> Standard")
+        layer_parts = self.layer.split(" -> ")
+        layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+        layer_1_name = layer_parts[1].upper() if len(layer_parts) > 1 else "STAGE"
+        self.layer_0_db = kwargs.get("layer_0_db", f"{layer_0_name}_DB")
+        self.layer_1_db = kwargs.get("layer_1_db", f"{layer_1_name}_DB")
+        self.schema = kwargs.get("schema", layer_0_name)
 
-    def add_meta_cols(self, schema, layer,db_type):
-        if layer == "MIRROR":
+    def add_meta_cols(self, schema, layer, db_type):
+        layer = layer.upper()
+        layer_parts = self.layer.split(" -> ")
+        layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+        if layer == layer_0_name:
             if db_type == "POSTGRES":
                 schema['FILE_DATE'] = "TIMESTAMP"
                 schema['FILE_NAME'] = "TEXT"
@@ -51,8 +70,10 @@ class ConfigTemplate():
 
         return schema
 
-    def get_mirror_schema(self, schema,db_type="SNOWFLAKE"):
-        mirror_schema = self.add_meta_cols(schema.copy(), "MIRROR",db_type)
+    def get_mirror_schema(self, schema, db_type="SNOWFLAKE"):
+        layer_parts = self.layer.split(" -> ")
+        layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+        mirror_schema = self.add_meta_cols(schema.copy(), layer_0_name, db_type)
 
         return mirror_schema
 
@@ -61,10 +82,10 @@ class ConfigTemplate():
         for col_name in columns:
             file_schema[col_name.replace(" ", "_").upper()] = "TEXT"
 
-        file_schema = {f'{k}':v for k,v in file_schema.items()}
+        file_schema = {f'{k}': v for k, v in file_schema.items()}
         return file_schema
 
-    def get_stage_schema(self, data_types,db_type="SNOWFLAKE"):
+    def get_stage_schema(self, data_types, db_type="SNOWFLAKE"):
         schema = {}
         for col_name, col_dtypes in data_types.items():
             if db_type == "POSTGRES":
@@ -72,7 +93,9 @@ class ConfigTemplate():
             else:
                 schema[col_name.replace(" ", "_").upper()] = col_dtypes["snowflake_dtype"]
 
-        stage_schema = self.add_meta_cols(schema, "STAGE",db_type)
+        layer_parts = self.layer.split(" -> ")
+        layer_1_name = layer_parts[1].upper() if len(layer_parts) > 1 else "STAGE"
+        stage_schema = self.add_meta_cols(schema, layer_1_name, db_type)
         stage_schema = {f'{k}': v for k, v in stage_schema.items()}
         return stage_schema
 
@@ -87,10 +110,10 @@ class ConfigTemplate():
         file_schema = self.get_file_schema(data_types)
 
         # Mirror schema is always TEXT data types with additional file metadata columns
-        mirror_schema = self.get_mirror_schema(file_schema,self.db_type)
+        mirror_schema = self.get_mirror_schema(file_schema, self.db_type)
 
         # Stage schema is actual data type of each column after schema inferences with additional file metadata columns
-        stage_schema = self.get_stage_schema(data_types,self.db_type)
+        stage_schema = self.get_stage_schema(data_types, self.db_type)
 
         dataset_name = self.dataset_name  # os.path.basename(os.path.dirname(self.file_path))
 
@@ -112,38 +135,51 @@ class ConfigTemplate():
             mirror_validation_procedure_sqls = sql_file_read.read() + "\n"
             sql_file_read.close()
 
-            debug_sql = """\n /* # Copy Procedure Python code to a file add following lines at the end of the file and debug incase procedure has errors or not working as expected 
+            # Extract first two layer names from selected layer
+            layer_parts = self.layer.split(" -> ")
+            layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+            layer_1_name = layer_parts[1].upper() if len(layer_parts) > 1 else "STAGE"
+
+            logging.info("Layer Configuration:")
+            logging.info(f"  Selected Layer: {self.layer}")
+            logging.info(f"  Layer 0 Database: {self.layer_0_db}, Schema: {layer_0_name}")
+            logging.info(f"  Layer 1 Database: {self.layer_1_db}, Schema: {layer_1_name}")
+
+            debug_sql = f"""\n /* # Copy Procedure Python code to a file add following lines at the end of the file and debug incase procedure has errors or not working as expected 
 
                 # Connect to Snowflake
-                connection_parameters = {
+                connection_parameters = {{
                     "user":os.getenv("SNOWFLAKE_USER"),
                     "password":os.getenv("SNOWFLAKE_PASSWORD"),
                     "account":os.getenv("SNOWFLAKE_ACCOUNT"),
                     "database":os.getenv("SNOWFLAKE_DATABASE"),
                     "schema":os.getenv("SNOWFLAKE_SCHEMA"),
                     "warehouse":os.getenv("SNOWFLAKE_WAREHOUSE"),
-                    "role":os.getenv("SNOWFLAKE_ROLE")}
+                    "role":os.getenv("SNOWFLAKE_ROLE")}}
 
 
                 # Create a Snowpark session
                 session = Session.builder.configs(connection_parameters).create()
 
-                result = compare_csv_with_table(session=session,dataset_name='NETFLIX_MOVIES_AND_TV_SHOWS',
-                                       database="MIRROR_DB",schema="MIRROR",
-                                       stage_name = "STG_NETFLIX_MOVIES_AND_TV_SHOWS",
-                                       table_name = 'T_ML_NETFLIX_MOVIES_AND_TV_SHOWS_TR',
+                result = compare_csv_with_table(session=session,dataset_name='{dataset_name}',
+                                       database="{self.layer_0_db}",schema="{layer_0_name}",
+                                       stage_name = "STG_{dataset_name}",
+                                       table_name = 'T_ML_{dataset_name}_TR',
                                         run_date="2024-12-21"
                     )
 
                 print(result) */
                 """
             file_extension = os.path.basename(self.file_path).split(".")[-1]
+
             pipeline = SnowflakePipeline(bucket=self.bucket, dataset_path=self.dataset_path,
                                          dataset_name=self.dataset_name, file_extension=file_extension,
                                          delimiter=delimiter, mirror_schema=mirror_schema, file_schema=file_schema,
                                          aws_access_key=self.aws_access_key, aws_secret_key=self.aws_secret_key,
                                          stage_schema=stage_schema, schedule_interval=self.schedule_interval,
-                                         snowflake_stage_name=self.snowflake_stage_name)
+                                         snowflake_stage_name=self.snowflake_stage_name, layer=self.layer,
+                                         layer_0_db=self.layer_0_db, layer_1_db=self.layer_1_db,
+                                         layer_0_schema=layer_0_name, layer_1_schema=layer_1_name)
 
             pipeline_sqls = pipeline.get_all_sqls()
 
@@ -163,27 +199,39 @@ class ConfigTemplate():
             if len(dataset_configs_path) > 255:
                 dataset_configs_path = r'\\?\{}'.format(dataset_configs_path)
 
+            # Extract first two layer names from selected layer
+            layer_parts = self.layer.split(" -> ")
+            layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+            layer_1_name = layer_parts[1].upper() if len(layer_parts) > 1 else "STAGE"
+
+            logging.info("Layer Configuration:")
+            logging.info(f"  Selected Layer: {self.layer}")
+            logging.info(f"  Layer 0 Database: {self.layer_0_db}, Schema: {layer_0_name}")
+            logging.info(f"  Layer 1 Database: {self.layer_1_db}, Schema: {layer_1_name}")
+
             if self.db_type == "POSTGRES":
                 ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
                                             start_date=self.start_date, load_historical_data=self.catchup,
                                             snowflake_stage_name="",
-                                            db_conn_id = "POSTGRES_CONN_ID",
+                                            db_conn_id="POSTGRES_CONN_ID",
                                             tasks=["acq_task",
-                                                 "download_task",
-                                                 "postgres_schema_check_task",
-                                                 "copy_to_postgres_task",
-                                                 "postgres_file_mirror_data_check_task",
-                                                 "postgres_mirror_task",
-                                                 "postgres_mirror_tests_task",
-                                                 "postgres_stage_task",
-                                                 "postgres_stage_tests_task"],
-                                            mirror_layer ={"database": "COMMON_DB", "schema": "MIRROR"},
-                                            stage_layer={"database": "COMMON_DB", "schema": "STAGE"},
+                                                   "download_task",
+                                                   "postgres_schema_check_task",
+                                                   "copy_to_postgres_task",
+                                                   "postgres_file_mirror_data_check_task",
+                                                   "postgres_mirror_task",
+                                                   "postgres_mirror_tests_task",
+                                                   "postgres_stage_task",
+                                                   "postgres_stage_tests_task"],
+                                            mirror_layer={"database": self.layer_0_db, "schema": layer_0_name},
+                                            stage_layer={"database": self.layer_1_db, "schema": layer_1_name},
                                             schedule_interval=self.schedule_interval)
             else:
                 ds_configs = DatasetConfigs(dataset_name=dataset_name, bucket=self.bucket,
-                                        start_date=self.start_date, load_historical_data=self.catchup,
-                                        snowflake_stage_name=f"STG_{dataset_name}".upper(),
+                                            start_date=self.start_date, load_historical_data=self.catchup,
+                                            snowflake_stage_name=f"STG_{dataset_name}".upper(),
+                                            mirror_layer={"database": self.layer_0_db, "schema": layer_0_name},
+                                            stage_layer={"database": self.layer_1_db, "schema": layer_1_name},
                                             schedule_interval=self.schedule_interval)
 
             write_to_json_file(data=ds_configs.__dict__, file_path=dataset_configs_path)
@@ -210,7 +258,8 @@ class ConfigTemplate():
             if len(dataset_configs_mirror_v1_path) > 255:
                 dataset_configs_mirror_v1_path = r'\\?\{}'.format(dataset_configs_mirror_v1_path)
 
-            file_name_pattern, datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path),self.datetime_format)
+            file_name_pattern, datetime_pattern = get_file_name_pattern(os.path.basename(self.file_path),
+                                                                        self.datetime_format)
             datetime_pattern = self.datetime_format if self.datetime_format else datetime_pattern.replace("%Y",
                                                                                                           "YYYY").replace(
                 "%m", "MM").replace("%d", "DD")

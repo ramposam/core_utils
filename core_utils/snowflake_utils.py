@@ -55,7 +55,7 @@ class SnowflakeUtils:
         logging.info(f"File format sql: {copy_sql}")
         return copy_sql
 
-    def get_mirror_stage_ddls(self, database, schema, table_name, table_schema,layer):
+    def get_mirror_stage_ddls(self, database, schema, table_name, table_schema, layer, layer_name=None):
 
         """
         Generate Snowflake table DDL from table name and schema.
@@ -64,14 +64,15 @@ class SnowflakeUtils:
         :param table_schema: Dictionary with column names as keys and data types as values
         :return: DDL TEXT for creating the table
         """
-        ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
+        ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n USE DATABASE {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
         ddl += f" CREATE TABLE IF NOT EXISTS {table_name} (\n"
         column_definitions = []
 
         for column_name, data_type in table_schema.items():
             column_definitions.append(f"    {column_name} {data_type}")
 
-        if layer.upper() =="MIRROR" and not table_name.endswith("_TR"):
+        layer_check = layer_name.upper() if layer_name else schema.upper()
+        if layer.upper() == layer_check and not table_name.endswith("_TR"):
             column_definitions.append(f"    UPDATED_DTS TIMESTAMP")
             column_definitions.append(f"    UPDATED_BY TEXT")
             column_definitions.append(f"    UNIQUE_HASH_ID TEXT")

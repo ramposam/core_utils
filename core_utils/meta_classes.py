@@ -2,6 +2,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from datetime import datetime
 
+def get_default_mirror_layer():
+    return {"database": "MIRROR_DB", "schema": "MIRROR"}
+
+def get_default_stage_layer():
+    return {"database": "STAGE_DB", "schema": "STAGE"}
+
 @dataclass
 class DatasetConfigs:
     dataset_name: str
@@ -18,8 +24,8 @@ class DatasetConfigs:
                                  "snowflake_mirror_tests_task",
                                  "snowflake_stage_task",
                                  "snowflake_stage_tests_task"])
-    mirror_layer: Dict = field(default_factory=lambda: {"database": "MIRROR_DB", "schema": "MIRROR"})
-    stage_layer: Dict = field(default_factory=lambda: {"database": "STAGE_DB", "schema": "STAGE"})
+    mirror_layer: Dict = field(default_factory=get_default_mirror_layer)
+    stage_layer: Dict = field(default_factory=get_default_stage_layer)
     s3_connection_id: str = field(default="S3_CONN_ID")
     db_conn_id: str = field(default="SNOWFLAKE_CONN_ID")
     start_date: str = field(default=datetime.strftime(datetime.today(),"%Y,%m,%d"))

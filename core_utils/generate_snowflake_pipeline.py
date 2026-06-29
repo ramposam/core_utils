@@ -1,9 +1,17 @@
 import json
+import logging
 
 from core_utils.constants import snowflake_stage_template, snowflake_pipe_template, mirror_addl_meta_cols, \
     stage_addl_meta_cols
 from core_utils.snowflake_utils import SnowflakeUtils
-import logging
+
+# Configure logging with datetime
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 
 class SnowflakePipeline():
     def __init__(self, **kwargs):
@@ -20,9 +28,19 @@ class SnowflakePipeline():
         self.schedule_interval = kwargs.get("schedule_interval")
         self.warehouse = "COMPUTE_WH"
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
+        self.layer = kwargs.get("layer", "Mirror -> Stage -> Standard")
+        layer_parts = self.layer.split(" -> ")
+        layer_0_name = layer_parts[0].upper() if len(layer_parts) > 0 else "MIRROR"
+        layer_1_name = layer_parts[1].upper() if len(layer_parts) > 1 else "STAGE"
+        self.layer_0_db = kwargs.get("layer_0_db", f"{layer_0_name}_DB")
+        self.layer_1_db = kwargs.get("layer_1_db", f"{layer_1_name}_DB")
+        self.layer_0_schema = kwargs.get("layer_0_schema", layer_0_name)
+        self.layer_1_schema = kwargs.get("layer_1_schema", layer_1_name)
 
     def get_stage_sql(self):
-        stage_sql = snowflake_stage_template.format(bucket=self.bucket,
+        stage_sql = snowflake_stage_template.format(layer_0_db=self.layer_0_db,
+                                                    layer_0_schema=self.layer_0_schema,
+                                                    bucket=self.bucket,
                                                     dataset_path=self.dataset_path,
                                                     dataset_name=self.dataset_name.upper(),
                                                     aws_access_key=self.aws_access_key,
@@ -31,7 +49,9 @@ class SnowflakePipeline():
 
     def get_snowpipe_sql(self, copy_statement):
 
-        snowflake_pipe_sql = snowflake_pipe_template.format(dataset_name=self.dataset_name.upper(),
+        snowflake_pipe_sql = snowflake_pipe_template.format(layer_0_db=self.layer_0_db,
+                                                            layer_0_schema=self.layer_0_schema,
+                                                            dataset_name=self.dataset_name.upper(),
                                                             file_extension=self.file_extension,
                                                             copy_statement=copy_statement)
         return snowflake_pipe_sql
@@ -42,8 +62,8 @@ class SnowflakePipeline():
          """
         return stream_sql
 
-    def get_task_sql(self, stream_name, task_name, table_name,table_schema,layer):
-        insert_statement = self.get_layer_insert_statement(stream_name,table_name,table_schema,layer)
+    def get_task_sql(self, stream_name, task_name, table_name, table_schema, layer):
+        insert_statement = self.get_layer_insert_statement(stream_name, table_name, table_schema, layer)
         task_sql = f"""CREATE OR REPLACE TASK {task_name}
             SCHEDULE = 'USING CRON {self.schedule_interval} UTC'
             WAREHOUSE = '{self.warehouse}'
@@ -57,25 +77,29 @@ class SnowflakePipeline():
 
         return task_sql
 
-    def get_layer_insert_statement(self,stream_name,table_name,table_schema,layer):
+    def get_layer_insert_statement(self, stream_name, table_name, table_schema, layer):
 
         columns = []
         for column_name, data_type in table_schema.items():
             columns.append(column_name.upper())
 
-        if layer.upper() == "MIRROR":
+        if layer.upper() == self.layer_0_schema.upper():
 
             insert_columns = columns + mirror_addl_meta_cols
-            select_columns = columns + ["NULL as UPDATED_DTS", "NULL AS UPDATED_BY" , "NULL AS UNIQUE_HASH_ID", "NULL AS ROW_HASH_ID"]
+            select_columns = columns + ["NULL as UPDATED_DTS", "NULL AS UPDATED_BY", "NULL AS UNIQUE_HASH_ID",
+                                        "NULL AS ROW_HASH_ID"]
             # statement += f"INSERT INTO {table_name} (" + " , ".join(insert_columns) + ") \n"
             # statement += f"""SELECT {" , ".join(select_columns)} FROM {stream_name} ; \n"""
             update_stmt = ",".join([f"TARGET.{col} = SOURCE.{col}" for col in insert_columns])
 
-        elif layer.upper() == "STAGE":
+        elif layer.upper() == self.layer_1_schema.upper():
 
             mirror_cols = columns + mirror_addl_meta_cols
-            remove_file_meta_columns = [column for column in mirror_cols if column not in ["FILE_DATE" , "FILENAME" , "FILE_ROW_NUMBER" , "FILE_LAST_MODIFIED"]]
-            select_columns = remove_file_meta_columns  + ["'Y' as ACTIVE_FL","FILE_DATE AS EFFECTIVE_START_DATE", "'9999-12-31' AS EFFECTIVE_END_DATE"]
+            remove_file_meta_columns = [column for column in mirror_cols if
+                                        column not in ["FILE_DATE", "FILENAME", "FILE_ROW_NUMBER",
+                                                       "FILE_LAST_MODIFIED"]]
+            select_columns = remove_file_meta_columns + ["'Y' as ACTIVE_FL", "FILE_DATE AS EFFECTIVE_START_DATE",
+                                                         "'9999-12-31' AS EFFECTIVE_END_DATE"]
             insert_columns = remove_file_meta_columns + stage_addl_meta_cols
             # statement += f"INSERT INTO {table_name} (" + " , ".join(insert_columns) + ") \n"
             # statement += f"""SELECT {" , ".join(select_columns)} ,'Y' as ACTIVE_FL,FILE_DATE AS EFFECTIVE_START_DATE, '9999-12-31' AS EFFECTIVE_END_DATE FROM {stream_name} ; \n"""
@@ -102,7 +126,7 @@ class SnowflakePipeline():
 
         return merge_stmt
 
-    def get_file_meta_sql(self, database, schema, table_name,dataset_name, version, start_date, end_date):
+    def get_file_meta_sql(self, database, schema, table_name, dataset_name, version, start_date, end_date):
         logging.info(self.file_schema)
         indexed_file_schema = []
         for key, val in self.file_schema.items():
@@ -133,7 +157,7 @@ class SnowflakePipeline():
           CREATED_DTS TIMESTAMP_NTZ(9), 
           CREATED_BY VARCHAR(16777216)
         );
-            
+
         CREATE TABLE IF NOT EXISTS META_DB.META.T_FILE_VALIDATION_DETAILS (
           VALIDATION_DETAIL_ID NUMBER AUTOINCREMENT START 1 INCREMENT 1,
           VALIDATION_ID NUMBER, 
@@ -157,10 +181,11 @@ class SnowflakePipeline():
 
         return file_meta_sql
 
-    def get_mirror_validation_task(self, stream_name,dataset_name,stage_name,database,schema, task_name, table_name):
+    def get_mirror_validation_task(self, stream_name, dataset_name, stage_name, database, schema, task_name,
+                                   table_name):
         validation_sql = f"""CREATE OR REPLACE TASK {task_name}
             WAREHOUSE = COMPUTE_WH
-            AFTER MIRROR_DB.MIRROR.TASK_LOG_SNOWPIPE_ERRORS            
+            AFTER {self.layer_0_db}.{self.layer_0_schema}.TASK_LOG_SNOWPIPE_ERRORS            
             WHEN SYSTEM$STREAM_HAS_DATA('{stream_name}') -- Skips execution if the stream has no data
             AS
             CALL META_DB.META.VALIDATE_FILE_AND_TABLE(
@@ -178,20 +203,20 @@ class SnowflakePipeline():
     def get_all_sqls(self):
 
         dataset_name_upper = self.dataset_name.upper()
-        mirror_tr_table_name = f'"MIRROR_DB"."MIRROR"."T_ML_{dataset_name_upper}_TR"'
-        file_format_name = f'"MIRROR_DB"."MIRROR"."FF_{dataset_name_upper}"'
-        mirror_stream_name = f'"MIRROR_DB"."MIRROR"."STREAM_{dataset_name_upper}"'
-        mirror_tr_stream_name = f'"MIRROR_DB"."MIRROR"."STREAM_{dataset_name_upper}_TR"'
-        mirror_task_name = f'"MIRROR_DB"."MIRROR"."TASK_{dataset_name_upper}"'
-        mirror_tr_validation_task_name = f'"MIRROR_DB"."MIRROR"."TASK_{dataset_name_upper}_TR_VALIDATION"'
-        mirror_table_name = f'"MIRROR_DB"."MIRROR"."T_ML_{dataset_name_upper}"'
-        stg_table_name = f'"STAGE_DB"."STAGE"."T_STG_{dataset_name_upper}"'
-        stg_stream_name = f'"STAGE_DB"."STAGE"."STREAM_{dataset_name_upper}"'
-        stg_task_name = f'"STAGE_DB"."STAGE"."TASK_{dataset_name_upper}"'
+        mirror_tr_table_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."T_ML_{dataset_name_upper}_TR"'
+        file_format_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."FF_{dataset_name_upper}"'
+        mirror_stream_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."STREAM_{dataset_name_upper}"'
+        mirror_tr_stream_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."STREAM_{dataset_name_upper}_TR"'
+        mirror_task_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."TASK_{dataset_name_upper}"'
+        mirror_tr_validation_task_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."TASK_{dataset_name_upper}_TR_VALIDATION"'
+        mirror_table_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."T_ML_{dataset_name_upper}"'
+        stg_table_name = f'"{self.layer_1_db}"."{self.layer_1_schema}"."T_STG_{dataset_name_upper}"'
+        stg_stream_name = f'"{self.layer_1_db}"."{self.layer_1_schema}"."STREAM_{dataset_name_upper}"'
+        stg_task_name = f'"{self.layer_1_db}"."{self.layer_1_schema}"."TASK_{dataset_name_upper}"'
 
         if self.aws_access_key and self.aws_secret_key:
             stage_sql = self.get_stage_sql()
-            stage_name = f'"MIRROR_DB"."MIRROR"."STG_{dataset_name_upper}_S3"'
+            stage_name = f'"{self.layer_0_db}"."{self.layer_0_schema}"."STG_{dataset_name_upper}_S3"'
         else:
             stage_sql = ""
             stage_name = self.snowflake_stage_name
@@ -203,10 +228,12 @@ class SnowflakePipeline():
         file_format_sql = util.get_file_format_sql(file_format_name=file_format_name,
                                                    delimiter=self.delimiter)
 
-        mirror_tr_table_sql = util.get_mirror_stage_ddls("MIRROR_DB", "MIRROR", mirror_tr_table_name,
-                                                         self.mirror_schema,'MIRROR')
-        mirror_table_sql = util.get_mirror_stage_ddls("MIRROR_DB", "MIRROR", mirror_table_name, self.mirror_schema,'MIRROR')
-        stage_table_sql = util.get_mirror_stage_ddls("STAGE_DB", "STAGE", stg_table_name, self.stage_schema,'STAGE')
+        mirror_tr_table_sql = util.get_mirror_stage_ddls(self.layer_0_db, self.layer_0_schema, mirror_tr_table_name,
+                                                         self.mirror_schema, self.layer_0_schema, self.layer_0_schema)
+        mirror_table_sql = util.get_mirror_stage_ddls(self.layer_0_db, self.layer_0_schema, mirror_table_name,
+                                                      self.mirror_schema, self.layer_0_schema, self.layer_0_schema)
+        stage_table_sql = util.get_mirror_stage_ddls(self.layer_1_db, self.layer_1_schema, stg_table_name,
+                                                     self.stage_schema, self.layer_1_schema, self.layer_1_schema)
 
         if isinstance(self.mirror_schema, dict):
             columns = list(self.mirror_schema.keys())
@@ -221,29 +248,33 @@ class SnowflakePipeline():
 
         mirror_stream_sql = self.get_stream_sql(stream_name=mirror_tr_stream_name, table_name=mirror_tr_table_name)
 
-        mirror_validation_sql = self.get_mirror_validation_task(stream_name=mirror_tr_stream_name,dataset_name=dataset_name_upper,
-                                                                stage_name=stage_name,database="MIRROR_DB",schema="MIRROR",task_name=mirror_tr_validation_task_name,
+        mirror_validation_sql = self.get_mirror_validation_task(stream_name=mirror_tr_stream_name,
+                                                                dataset_name=dataset_name_upper,
+                                                                stage_name=stage_name, database=self.layer_0_db,
+                                                                schema=self.layer_0_schema,
+                                                                task_name=mirror_tr_validation_task_name,
                                                                 table_name=mirror_tr_table_name)
 
         mirror_task_sql = self.get_task_sql(stream_name=mirror_tr_stream_name, task_name=mirror_task_name,
-                                            table_name=mirror_table_name,table_schema=self.mirror_schema,layer="MIRROR")
+                                            table_name=mirror_table_name, table_schema=self.mirror_schema,
+                                            layer=self.layer_0_schema)
 
         stage_stream_sql = self.get_stream_sql(stream_name=stg_stream_name, table_name=mirror_table_name)
 
         stage_task_sql = self.get_task_sql(stream_name=stg_stream_name, task_name=stg_task_name,
-                                           table_name=stg_table_name,table_schema=self.mirror_schema,layer="STAGE")
+                                           table_name=stg_table_name, table_schema=self.mirror_schema, layer=self.layer_1_schema)
 
-        file_meta_sql = self.get_file_meta_sql("MIRROR_DB", "MIRROR", mirror_tr_table_name,
+        file_meta_sql = self.get_file_meta_sql(self.layer_0_db, self.layer_0_schema, mirror_tr_table_name,
                                                dataset_name_upper, "V1", "2021-01-01",
                                                "9999-12-31")
 
-        drop_sql = """
-        DROP DATABASE IF EXISTS MIRROR_DB;
-        DROP DATABASE IF EXISTS STAGE_DB;
+        drop_sql = f"""
+        DROP DATABASE IF EXISTS {self.layer_0_db};
+        DROP DATABASE IF EXISTS {self.layer_1_db};
         DROP DATABASE IF EXISTS META_DB;
         """
-        all_sqls = "\n".join([drop_sql,file_meta_sql, mirror_tr_table_sql, mirror_table_sql, stage_table_sql,
+        all_sqls = "\n".join([drop_sql, file_meta_sql, mirror_tr_table_sql, mirror_table_sql, stage_table_sql,
                               stage_sql, file_format_sql, snowpipe_sql, mirror_stream_sql,
-                              mirror_validation_sql,mirror_task_sql, stage_stream_sql, stage_task_sql])
+                              mirror_validation_sql, mirror_task_sql, stage_stream_sql, stage_task_sql])
 
         return all_sqls

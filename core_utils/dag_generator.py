@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import logging
 
 from constants.constants import default_args, dag_template
 from core_utils.config_reader import ConfigReader
@@ -128,7 +129,7 @@ with DAG(
             db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
@@ -143,7 +144,7 @@ with DAG(
             db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}"
         )
@@ -156,7 +157,7 @@ with DAG(
             db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             stage_name="{mirror_db}.{mirror_schema}.{dataset_configs["snowflake_stage_name"]}",
@@ -183,7 +184,7 @@ with DAG(
             db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
@@ -197,7 +198,7 @@ with DAG(
             db_conn_id="{dataset_configs["db_conn_id"]}",
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}",
             encoding="{dataset_configs["mirror"]["v1"]["encoding"]}",
             table_name="{mirror_db}.{mirror_schema}.{dataset_configs["mirror"]["v1"]["table_name"]}_TR"
@@ -211,7 +212,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -223,7 +224,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -235,7 +236,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -247,7 +248,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -259,7 +260,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -271,7 +272,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -283,7 +284,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -295,7 +296,7 @@ with DAG(
             s3_conn_id={None if dataset_configs["s3_connection_id"] is None else f'"{dataset_configs["s3_connection_id"]}"'},
             db_conn_id="{dataset_configs["db_conn_id"]}",
             bucket_name={None if dataset_configs["bucket"] is None else f'"{dataset_configs["bucket"]}"'},
-            configs_path={f'"/opt/airflow/dataset_configs/dev/"' if dataset_configs["bucket"] is None else f'"dataset_configs/dev/"'},
+            configs_path={f'"/opt/airflow/configs/"' if dataset_configs["bucket"] is None else f'"dev/configs/"'},
             dataset_name="{dataset_configs["dataset_name"]}"
         )
             """
@@ -308,7 +309,7 @@ with DAG(
         dag_template += dag_tasks
         return dag_template
 
-    def generate_ddls(self, database, schema, table_name, table_schema, layer):
+    def generate_ddls(self, database, schema, table_name, table_schema, layer, layer_name=None):
 
         """
         Generate Snowflake table DDL from table name and schema.
@@ -318,7 +319,7 @@ with DAG(
         :param table_schema: Dictionary with column names as keys and data types as values
         :return: DDL string for creating the table
         """
-        ddl = f""" CREATE DATABASE IF NOT EXISTS {database};\n CREATE SCHEMA IF NOT EXISTS {schema};\n """
+        ddl = f""" CREATE DATABASE IF NOT EXISTS "{database}";\n USE DATABASE "{database}";\n CREATE SCHEMA IF NOT EXISTS "{schema}";\n """
         ddl += f' CREATE TABLE IF NOT EXISTS "{database}"."{schema}"."{table_name}" (\n'
         column_definitions = []
 
@@ -328,7 +329,8 @@ with DAG(
             else:
                 column_definitions.append(f"    {column_name} {data_type}")
 
-        if layer.upper() == "MIRROR" and not table_name.endswith("_TR"):
+        layer_check = layer_name.upper() if layer_name else schema.upper()
+        if layer.upper() == layer_check and not table_name.endswith("_TR"):
             column_definitions.append(f'    "UPDATED_DTS" TIMESTAMP')
             column_definitions.append(f'    "UPDATED_BY" TEXT')
             column_definitions.append(f'    "UNIQUE_HASH_ID" TEXT')
@@ -359,11 +361,11 @@ with DAG(
         table_name, table_schema = dataset_configs["mirror"]["v1"]["table_name"], dataset_configs["mirror"]["v1"][
             "table_schema"]
 
-        mirror_tr_ddls = self.generate_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema, "mirror")
+        mirror_tr_ddls = self.generate_ddls(mirror_db, mirror_schema, f"{table_name}_TR", table_schema, "mirror", mirror_schema)
 
         write_to_file(mirror_tr_ddls, os.path.join(dag_gen_dir, f"{table_name}_TR.sql"))
 
-        mirror_ddls = self.generate_ddls(mirror_db, mirror_schema, table_name, table_schema, "mirror")
+        mirror_ddls = self.generate_ddls(mirror_db, mirror_schema, table_name, table_schema, "mirror", mirror_schema)
 
         write_to_file(mirror_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
@@ -371,7 +373,7 @@ with DAG(
         table_name, table_schema = dataset_configs["stage"]["v1"]["table_name"], dataset_configs["stage"]["v1"][
             "table_schema"]
 
-        stage_ddls = self.generate_ddls(stage_db, stage_schema, table_name, table_schema, "stage")
+        stage_ddls = self.generate_ddls(stage_db, stage_schema, table_name, table_schema, "stage", stage_schema)
 
         write_to_file(stage_ddls, os.path.join(dag_gen_dir, table_name + ".sql"))
 
