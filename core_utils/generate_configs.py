@@ -30,6 +30,7 @@ class ConfigTemplate():
         self.schedule_interval = kwargs.get("schedule_interval")
         self.aws_access_key = kwargs.get("aws_access_key")
         self.aws_secret_key = kwargs.get("aws_secret_key")
+        self.kms_key_id = kwargs.get("kms_key_id", "")
         self.snowflake_stage_name = kwargs.get("snowflake_stage_name")
         self.encoding = kwargs.get("encoding")
         self.layer = kwargs.get("layer", "Mirror -> Stage -> Standard")
@@ -176,6 +177,7 @@ class ConfigTemplate():
                                          dataset_name=self.dataset_name, file_extension=file_extension,
                                          delimiter=delimiter, mirror_schema=mirror_schema, file_schema=file_schema,
                                          aws_access_key=self.aws_access_key, aws_secret_key=self.aws_secret_key,
+                                         kms_key_id=self.kms_key_id,
                                          stage_schema=stage_schema, schedule_interval=self.schedule_interval,
                                          snowflake_stage_name=self.snowflake_stage_name, layer=self.layer,
                                          layer_0_db=self.layer_0_db, layer_1_db=self.layer_1_db,

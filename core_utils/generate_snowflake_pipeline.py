@@ -18,6 +18,7 @@ class SnowflakePipeline():
         self.bucket = kwargs.get("bucket")
         self.aws_access_key = kwargs.get("aws_access_key")
         self.aws_secret_key = kwargs.get("aws_secret_key")
+        self.kms_key_id = kwargs.get("kms_key_id", "")
         self.dataset_path = kwargs.get("dataset_path")
         self.dataset_name = kwargs.get("dataset_name")
         self.file_extension = kwargs.get("file_extension")
@@ -44,7 +45,8 @@ class SnowflakePipeline():
                                                     dataset_path=self.dataset_path,
                                                     dataset_name=self.dataset_name.upper(),
                                                     aws_access_key=self.aws_access_key,
-                                                    aws_secret_key=self.aws_secret_key)
+                                                    aws_secret_key=self.aws_secret_key,
+                                                    kms_key_id=self.kms_key_id)
         return stage_sql
 
     def get_snowpipe_sql(self, copy_statement):
